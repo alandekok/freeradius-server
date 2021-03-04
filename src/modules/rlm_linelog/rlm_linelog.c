@@ -104,6 +104,7 @@ typedef struct {
 		gid_t			group;			//!< Resolved gid.
 		exfile_t		*ef;			//!< Exclusive file access handle.
 		bool			escape;			//!< Do filename escaping, yes / no.
+		bool			locking;	       	//!< lock the file
 		xlat_escape_legacy_t	escape_func;		//!< Escape function.
 	} file;
 
@@ -128,6 +129,7 @@ static const CONF_PARSER file_config[] = {
 	{ FR_CONF_OFFSET("permissions", FR_TYPE_UINT32, rlm_linelog_t, file.permissions), .dflt = "0600" },
 	{ FR_CONF_OFFSET("group", FR_TYPE_STRING, rlm_linelog_t, file.group_str) },
 	{ FR_CONF_OFFSET("escape_filenames", FR_TYPE_BOOL, rlm_linelog_t, file.escape), .dflt = "no" },
+	{ FR_CONF_OFFSET("locking", FR_TYPE_BOOL, rlm_linelog_t, file.locking), .dflt = "true" },
 	CONF_PARSER_TERMINATOR
 };
 
@@ -323,7 +325,7 @@ static int mod_instantiate(void *instance, CONF_SECTION *conf)
 			return -1;
 		}
 
-		inst->file.ef = module_exfile_init(inst, conf, 256, 30, true, NULL, NULL);
+		inst->file.ef = module_exfile_init(inst, conf, 256, 30, inst->file.locking, NULL, NULL);
 		if (!inst->file.ef) {
 			cf_log_err(conf, "Failed creating log file context");
 			return -1;
