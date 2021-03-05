@@ -1430,7 +1430,7 @@ static int encode(rlm_radius_udp_t const *inst, request_t *request, udp_request_
 		packet_len += 7;
 
 		MEM(vp = fr_pair_afrom_da(u->packet, attr_proxy_state));
-		fr_pair_value_memdup(vp, attr + 2, 5, true);
+		fr_pair_value_memdup(vp, attr + 2, 5, false);
 		fr_pair_add(&u->extra, vp);
 	}
 
@@ -1448,6 +1448,10 @@ static int encode(rlm_radius_udp_t const *inst, request_t *request, udp_request_
 		memset(msg + 2, 0,  RADIUS_MESSAGE_AUTHENTICATOR_LENGTH);
 
 		packet_len += msg[1];
+
+		MEM(vp = fr_pair_afrom_da(u->packet, attr_message_authenticator));
+		fr_pair_value_memdup(vp, attr + 2, 16, false);
+		fr_pair_add(&u->extra, vp);
 	}
 
 	/*
