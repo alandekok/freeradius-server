@@ -1443,8 +1443,6 @@ static int encode(rlm_radius_udp_t const *inst, request_t *request, udp_request_
 		uint8_t		*attr = u->packet + packet_len;
 		fr_pair_t	*vp;
 
-		attr = u->packet + packet_len;
-
 		attr[0] = (uint8_t) attr_message_authenticator->attr;
 		attr[1] = RADIUS_MESSAGE_AUTHENTICATOR_LENGTH + 2;
 		memset(attr + 2, 0,  RADIUS_MESSAGE_AUTHENTICATOR_LENGTH);
