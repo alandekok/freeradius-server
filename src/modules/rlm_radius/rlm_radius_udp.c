@@ -1271,7 +1271,6 @@ static decode_fail_t decode(TALLOC_CTX *ctx, fr_pair_list_t *reply, uint8_t *res
 static int encode(rlm_radius_udp_t const *inst, request_t *request, udp_request_t *u, uint8_t id)
 {
 	ssize_t			packet_len;
-	uint8_t			*msg = NULL;
 	int			message_authenticator = u->require_ma * (RADIUS_MESSAGE_AUTHENTICATOR_LENGTH + 2);
 	int			proxy_state = 6;
 
@@ -1441,13 +1440,16 @@ static int encode(rlm_radius_udp_t const *inst, request_t *request, udp_request_
 	 *	the buflen manipulation done above.
 	 */
 	if (message_authenticator) {
-		msg = u->packet + packet_len;
+		uint8_t		*attr = u->packet + packet_len;
+		fr_pair_t	*vp;
 
-		msg[0] = (uint8_t) attr_message_authenticator->attr;
-		msg[1] = RADIUS_MESSAGE_AUTHENTICATOR_LENGTH + 2;
-		memset(msg + 2, 0,  RADIUS_MESSAGE_AUTHENTICATOR_LENGTH);
+		attr = u->packet + packet_len;
 
-		packet_len += msg[1];
+		attr[0] = (uint8_t) attr_message_authenticator->attr;
+		attr[1] = RADIUS_MESSAGE_AUTHENTICATOR_LENGTH + 2;
+		memset(attr + 2, 0,  RADIUS_MESSAGE_AUTHENTICATOR_LENGTH);
+
+		packet_len += attr[1];
 
 		MEM(vp = fr_pair_afrom_da(u->packet, attr_message_authenticator));
 		fr_pair_value_memdup(vp, attr + 2, 16, false);
