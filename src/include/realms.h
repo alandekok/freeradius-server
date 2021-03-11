@@ -170,6 +170,7 @@ typedef struct home_pool_t {
 
 typedef struct _realm {
 	char const		*name;
+	CONF_SECTION		*cs;
 
 	bool			strip_realm;
 

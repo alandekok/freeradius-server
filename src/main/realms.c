@@ -2086,12 +2086,10 @@ static int realm_add(realm_config_t *rc, CONF_SECTION *cs)
 	return 0;
 }
 
-#ifdef HAVE_REGEX
 int realm_realm_add(REALM *r, CONF_SECTION *cs)
-#else
-int realm_realm_add(REALM *r, UNUSED CONF_SECTION *cs)
-#endif
 {
+	REALM *old;
+
 	/*
 	 *	The structs aren't mutex protected.  Refuse to destroy
 	 *	the server.
@@ -2143,6 +2141,14 @@ int realm_realm_add(REALM *r, UNUSED CONF_SECTION *cs)
 	}
 #endif
 
+	old = rbtree_finddata(realms_byname, r);
+	if (old) {
+		cf_log_err_cs(cs, "Duplicate realm %s", r->name);
+		if (old->cs) cf_log_err_cs(old->cs, "Original realm %s", old->name);
+		return 0;
+	}
+
+	r->cs = cs;
 	if (!rbtree_insert(realms_byname, r)) {
 		rad_assert("Internal sanity check failed" == NULL);
 		return 0;
