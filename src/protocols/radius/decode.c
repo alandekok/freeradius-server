@@ -729,10 +729,16 @@ static ssize_t decode_extended(TALLOC_CTX *ctx, fr_pair_list_t *out,
 
 	if (attr_len < 3) return -1;
 
+	fr_assert(packet_ctx->end != NULL);
+	fr_assert((data + data_len) <= packet_ctx->end);
+
+	FR_PROTO_TRACE("decode_extended attr %zu end %zu bytes to decode", attr_len, packet_ctx->end - data);
+
 	/*
-	 *	No continuation, just decode the attributre in place.
+	 *	No continuation, just decode the attribute in place.
 	 */
 	if ((data[1] & 0x80) == 0) {
+		FR_PROTO_TRACE("decode_extended: no continuation flag");
 		ret = fr_radius_decode_pair_value(ctx, out,
 						  parent, data + 2, attr_len - 2, packet_ctx);
 		if (ret < 0) return -1;
@@ -752,11 +758,32 @@ static ssize_t decode_extended(TALLOC_CTX *ctx, fr_pair_list_t *out,
 	last_frag = false;
 
 	while (frag < end) {
-		if (last_frag ||
-		    (frag[0] != attr[0]) ||
-		    (frag[1] < 4) ||		       /* too short for long-extended */
-		    (frag[2] != attr[2]) ||
-		    ((frag + frag[1]) > end)) {		/* overflow */
+		if (last_frag) {
+			FR_PROTO_TRACE("last frag at offset %zu", frag - data);
+			end = frag;
+			break;
+		}
+
+		if (frag[0] != attr[0]) {
+			FR_PROTO_TRACE("attr mismatch at offset %zu", frag - data);
+			end = frag;
+			break;
+		}
+
+		if (frag[1] < 4) {
+			FR_PROTO_TRACE("next attr is too small at offset %zu", frag - data);
+			end = frag;
+			break;
+		}
+
+		if (frag[2] != attr[2]) {
+			FR_PROTO_TRACE("next %u doesn't match %u at offset %zu", frag - data, frag[2], attr[2]);
+			end = frag;
+			break;
+		}
+
+		if ((frag + frag[1]) > end) {
+			FR_PROTO_TRACE("overflow %u at offset %zu", frag - data, frag[1]);
 			end = frag;
 			break;
 		}
@@ -1169,6 +1196,8 @@ ssize_t fr_radius_decode_pair_value(TALLOC_CTX *ctx, fr_pair_list_t *out,
 		fr_strerror_printf("%s: packet is too large to be RADIUS", __FUNCTION__);
 		return -1;
 	}
+
+	fr_assert(packet_ctx->end != NULL);
 
 	if ((data + attr_len) > packet_ctx->end) {
 		fr_strerror_printf("%s: input overflows packet", __FUNCTION__);
