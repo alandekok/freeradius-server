@@ -730,7 +730,7 @@ static ssize_t decode_extended(TALLOC_CTX *ctx, fr_pair_list_t *out,
 	if (attr_len < 3) return -1;
 
 	fr_assert(packet_ctx->end != NULL);
-	fr_assert((data + data_len) <= packet_ctx->end);
+	fr_assert((data + attr_len) <= packet_ctx->end);
 
 	FR_PROTO_TRACE("decode_extended attr %zu end %zu bytes to decode", attr_len, packet_ctx->end - data);
 
@@ -777,13 +777,13 @@ static ssize_t decode_extended(TALLOC_CTX *ctx, fr_pair_list_t *out,
 		}
 
 		if (frag[2] != attr[2]) {
-			FR_PROTO_TRACE("next %u doesn't match %u at offset %zu", frag - data, frag[2], attr[2]);
+			FR_PROTO_TRACE("next %zu doesn't match %u at offset %u", frag - data, frag[2], attr[2]);
 			end = frag;
 			break;
 		}
 
 		if ((frag + frag[1]) > end) {
-			FR_PROTO_TRACE("overflow %u at offset %zu", frag - data, frag[1]);
+			FR_PROTO_TRACE("overflow %zu at offset %u", frag - data, frag[1]);
 			end = frag;
 			break;
 		}
