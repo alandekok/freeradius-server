@@ -32,5 +32,8 @@ match %(and:%{Framed-IP-Address} 4294901760)
 xlat_expr %{Framed-IP-Address} + 4
 match %(add:%{Framed-IP-Address} 4)
 
+xlat_expr 1 < 4
+match %(cmp_lt:1 4)
+
 count
-match 21
+match 23

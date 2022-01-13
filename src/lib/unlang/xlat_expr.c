@@ -255,23 +255,33 @@ static const fr_sbuff_term_elem_t binary_ops[T_TOKEN_LAST] = {
 static const int precedence[T_TOKEN_LAST] = {
 	[T_INVALID]	= 0,
 
-	[T_LAND]	= P(2,0),
-	[T_LOR]		= P(2,1),
+	// += -= *= /= %= <<= >>= &= ^= |=
 
-	[T_AND]		= P(3,0),
-	[T_OR]		= P(3,1),
+	[T_LOR]		= P(2,0),
+	[T_LAND]	= P(2,1),
 
-	[T_RSHIFT]	= P(4,0),
-	[T_LSHIFT]	= P(4,0),
+	[T_OR]		= P(3,0),
+	// ^ (3,1)
+	[T_AND]		= P(3,2),
 
-	[T_ADD]		= P(5,0),
-	[T_SUB]		= P(5,1),
+	[T_OP_CMP_EQ]	= P(4,0),
+	[T_OP_NE]	= P(4,0),
 
-	[T_MUL]		= P(6,0),
-	[T_DIV]		= P(6,1),
+	[T_OP_LT]	= P(5,0),
+	[T_OP_LE]	= P(5,0),
+	[T_OP_GT]	= P(5,0),
+	[T_OP_GE]	= P(5,0),
 
-	// @todo - exponentiation
-	[T_LBRACE]	= P(8,0),
+	[T_RSHIFT]	= P(6,0),
+	[T_LSHIFT]	= P(6,0),
+
+	[T_ADD]		= P(7,0),
+	[T_SUB]		= P(7,1),
+
+	[T_MUL]		= P(8,0),
+	[T_DIV]		= P(8,1),
+
+	[T_LBRACE]	= P(9,0),
 };
 
 #define fr_sbuff_skip_whitespace(_x) \
@@ -617,9 +627,11 @@ redo:
 	}	
 
 	if (!binary_ops[op].str) {
-		fr_strerror_printf("Invalid operator");
+		fr_strerror_printf("Invalid operator '%s'", fr_tokens[op]);
 		FR_SBUFF_ERROR_RETURN_ADJ(&in, -slen);
 	}
+
+	fr_assert(precedence[op] != 0);
 
 	/*
 	 *	a * b + c ... = (a * b) + c ...
