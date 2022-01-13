@@ -3671,7 +3671,7 @@ do { \
 
 	xlat_register(NULL, "module", xlat_func_module, NULL);
 
-	return 0;
+	return xlat_register_expressions();
 }
 
 
