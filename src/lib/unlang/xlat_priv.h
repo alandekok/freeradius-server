@@ -145,6 +145,10 @@ typedef struct {
 	size_t		len;		//!< Length of the output string.
 } xlat_out_t;
 
+/*
+ *	Helper functions
+ */
+
 /** Merge flags from child to parent
  *
  * For pass2, if either the parent or child is marked up for pass2, then the parent
@@ -160,6 +164,74 @@ static inline void xlat_flags_merge(xlat_flags_t *parent, xlat_flags_t const *ch
 	parent->pure &= child->pure; /* purity can only be removed, never added */
 	parent->pure &= !parent->needs_async; /* things needing async cannot be pure */
 }
+
+/** Set the type of an xlat node
+ *
+ * @param[in] node	to set type for.
+ * @param[in] type	to set.
+ */
+static inline void xlat_exp_set_type(xlat_exp_t *node, xlat_type_t type)
+{
+	node->type = type;
+}
+
+/** Allocate an xlat node with no name, and no type set
+ *
+ * @param[in] ctx	to allocate node in.
+ * @return A new xlat node.
+ */
+static inline xlat_exp_t *xlat_exp_alloc_null(TALLOC_CTX *ctx)
+{
+	xlat_exp_t *node;
+
+	MEM(node = talloc_zero(ctx, xlat_exp_t));
+	node->flags.pure = true;	/* everything starts pure */
+
+	return node;
+}
+
+/** Allocate an xlat node
+ *
+ * @param[in] ctx	to allocate node in.
+ * @param[in] type	of the node.
+ * @param[in] in	original input string.
+ * @param[in] inlen	the length of the original input string.
+ * @return A new xlat node.
+ */
+static inline xlat_exp_t *xlat_exp_alloc(TALLOC_CTX *ctx, xlat_type_t type,
+					 char const *in, size_t inlen)
+{
+	xlat_exp_t *node;
+
+	node = xlat_exp_alloc_null(ctx);
+	node->type = type;
+
+	if (!in) return node;
+
+	node->fmt = talloc_bstrndup(node, in, inlen);
+	switch (type) {
+	case XLAT_BOX:
+		fr_value_box_strdup_shallow(&node->data, NULL, node->fmt, false);
+		break;
+
+	default:
+		break;
+	}
+
+	return node;
+}
+
+/** Set the format string for an xlat node
+ *
+ * @param[in] node	to set fmt for.
+ * @param[in] fmt	talloced buffer to set as the fmt string.
+ */
+static inline void xlat_exp_set_name_buffer_shallow(xlat_exp_t *node, char const *fmt)
+{
+	if (node->fmt) talloc_const_free(node->fmt);
+	node->fmt = fmt;
+}
+
 
 /** Walker callback for xlat_walk()
  *
