@@ -2654,7 +2654,7 @@ static size_t command_xlat_expr(command_result_t *result, command_file_ctx_t *cc
 	}
 
 	if (((size_t) dec_len != input_len)) {
-		fr_strerror_printf_push_head("offset %d 'Too much text'", (int) dec_len);
+		fr_strerror_printf_push_head("Passed in %zu characters, but only parsed %zd characters", input_len, dec_len);
 		goto return_error;
 	}
 
