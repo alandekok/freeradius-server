@@ -427,9 +427,17 @@ check_more:
 	}
 
 	/*
-	 *	@todo - support %{xlat:...}
+	 *	Parse %{...}
 	 */
+	if (fr_sbuff_adv_past_str_literal(&in, "%{")) {
+		if (xlat_tokenize_expansion(ctx, &node, flags, &in, t_rules) < 0) {
+			return -1;
+		}
 
+		goto done;
+	}
+
+#if 0
 	/*
 	 *	@todo - support %(xlat:...)
 	 *
@@ -437,6 +445,17 @@ check_more:
 	 *	followed by something. i.e. "foo % (bar)".  So we have
 	 *	to be a bit careful about that.
 	 */
+	if (fr_sbuff_is_str(&in, "%(", 2)) {
+		fr_sbuff_marker_t marker;
+
+		fr_sbuff_marker(&marker, &in);
+
+		fr_sbuff_advance(&in, 2);
+
+		//
+
+	}
+#endif
 
 	/*
 	 *	Else it's nothing we recognize.  Do some quick checks
@@ -666,6 +685,7 @@ static const fr_sbuff_term_t operator_terms = FR_SBUFF_TERMS(
 	L("~"),
 	L("&"),
 	L("|"),
+	L("^"),
 	L(">"),
 	L("<"),
 );
@@ -676,6 +696,7 @@ ssize_t xlat_tokenize_expression(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_
 	ssize_t slen;
 	fr_sbuff_parse_rules_t *bracket_rules = NULL;
 	fr_sbuff_parse_rules_t *terminal_rules = NULL;
+	xlat_flags_t my_flags = { 0 };
 
 	/*
 	 *	If the terminal rules don't include a ')',
@@ -700,6 +721,8 @@ ssize_t xlat_tokenize_expression(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_
 	MEM(bracket_rules->terminals = fr_sbuff_terminals_amerge(bracket_rules,
 								 terminal_rules->terminals,
 								 &bracket_terms));
+
+	if (!flags) flags = &my_flags;
 	
 	slen = tokenize_expression(ctx, head, flags, in, terminal_rules, t_rules, T_INVALID, FR_TYPE_VOID,
 				   bracket_rules);

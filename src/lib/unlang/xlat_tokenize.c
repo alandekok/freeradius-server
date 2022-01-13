@@ -168,9 +168,6 @@ void xlat_exp_free(xlat_exp_t **head)
 	*head = NULL;
 }
 
-static int xlat_tokenize_expansion(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_t *flags, fr_sbuff_t *in,
-				   tmpl_rules_t const *t_rules);
-
 static int xlat_tokenize_string(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_t *flags,
 				 fr_sbuff_t *in, bool brace,
 				 fr_sbuff_parse_rules_t const *p_rules, tmpl_rules_t const *t_rules);
@@ -700,8 +697,8 @@ done:
 	return 0;
 }
 
-static int xlat_tokenize_expansion(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_t *flags, fr_sbuff_t *in,
-				   tmpl_rules_t const *t_rules)
+int xlat_tokenize_expansion(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_t *flags, fr_sbuff_t *in,
+			    tmpl_rules_t const *t_rules)
 {
 	size_t			len;
 	fr_sbuff_marker_t	s_m;

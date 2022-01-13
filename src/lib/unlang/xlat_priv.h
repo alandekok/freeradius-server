@@ -282,6 +282,12 @@ int xlat_decode_value_box_list(TALLOC_CTX *ctx, fr_pair_list_t *out,
  */
 int		xlat_register_expressions(void);
 
+/*
+ *	xlat_tokenize.c
+ */
+int		xlat_tokenize_expansion(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_t *flags, fr_sbuff_t *in,
+					tmpl_rules_t const *t_rules);
+
 #ifdef __cplusplus
 }
 #endif
