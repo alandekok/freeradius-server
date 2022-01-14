@@ -35,5 +35,11 @@ match %(add:%{Framed-IP-Address} 4)
 xlat_expr 1 < 4
 match %(cmp_lt:1 4)
 
+xlat_expr &Service-Type == Framed-User
+match %(cmp_eq:%{Service-Type} 2)
+
+xlat_expr 1 + (&Service-Type == Framed-User)
+match %(add:1 %(cmp_eq:%{Service-Type} 2))
+
 count
-match 23
+match 27

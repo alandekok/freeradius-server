@@ -295,7 +295,8 @@ static const int precedence[T_TOKEN_LAST] = {
 
 static ssize_t tokenize_expression(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_t *flags, fr_sbuff_t *input,
 				   fr_sbuff_parse_rules_t const *p_rules, tmpl_rules_t const *t_rules,
-				   fr_token_t prev, fr_type_t type, fr_sbuff_parse_rules_t const *bracket_rules);
+				   fr_token_t prev, fr_type_t type, fr_sbuff_parse_rules_t const *bracket_rules,
+				   fr_dict_attr_t const *da);
 
 
 /*
@@ -317,7 +318,7 @@ static ssize_t tokenize_expression(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flag
  */
 static ssize_t tokenize_field(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_t *flags, fr_sbuff_t *input,
 			      fr_sbuff_parse_rules_t const *p_rules, tmpl_rules_t const *t_rules,
-			      fr_type_t type, fr_sbuff_parse_rules_t const *bracket_rules)
+			      fr_type_t type, fr_sbuff_parse_rules_t const *bracket_rules, fr_dict_attr_t const *da)
 {
 	ssize_t		slen;
 	xlat_exp_t	*node = NULL;
@@ -405,7 +406,7 @@ check_more:
 		/*
 		 *	Tokenize the sub-expression, ensuring that we stop at ')'.
 		 */
-		slen = tokenize_expression(ctx, &node, flags, &in, bracket_rules, t_rules, T_INVALID, type, bracket_rules);
+		slen = tokenize_expression(ctx, &node, flags, &in, bracket_rules, t_rules, T_INVALID, type, bracket_rules, da);
 		if (slen <= 0) {
 			FR_SBUFF_ERROR_RETURN_ADJ(&in, slen);
 		}
@@ -493,18 +494,43 @@ check_more:
 	 *	Parse the thing as a value-box of the given type.
 	 */
 	{
-		fr_sbuff_marker_t marker;
 		char *p;
+		fr_sbuff_marker_t marker;
 
 		fr_sbuff_marker(&marker, &in);
 
 		MEM(node = xlat_exp_alloc_null(ctx));
 		xlat_exp_set_type(node, XLAT_BOX);
 
-		slen = fr_value_box_from_substr(node, &node->data, type, NULL, &in, p_rules, false);
-		if (slen <= 0) {
-			fr_strerror_printf("Failed parsing value");
-			FR_SBUFF_ERROR_RETURN_ADJ(&in, slen);
+		/*
+		 *	'-' and '/' are allowed in dictionary names.
+		 *	But they're also tokens allowed here.  So we
+		 *	have to jump through some hoops in order to
+		 *	parse both.
+		 *
+		 *	e.g. "Framed-User" should be parsed as that, and not as anything else.
+		 */
+		if (da) {
+			fr_dict_enum_value_t *enumv;
+
+			slen = fr_dict_enum_by_name_substr(&enumv, da, &in);
+			if (slen == 0) {
+				da = NULL;
+				goto parse_other;
+			}
+			if (slen < 0) {
+				goto failed_value;
+			}
+
+			fr_value_box_copy(node, &node->data, enumv->value);
+		} else {
+		parse_other:
+			slen = fr_value_box_from_substr(node, &node->data, type, da, &in, p_rules, false);
+			if (slen <= 0) {
+			failed_value:
+				fr_strerror_printf("Failed parsing value");
+				FR_SBUFF_ERROR_RETURN_ADJ(&in, slen);
+			}
 		}
 
 		MEM(p = talloc_array(node, char, slen + 1));
@@ -566,7 +592,8 @@ static size_t const expr_assignment_op_table_len = NUM_ELEMENTS(expr_assignment_
  */
 static ssize_t tokenize_expression(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_t *flags, fr_sbuff_t *input,
 				   fr_sbuff_parse_rules_t const *p_rules, tmpl_rules_t const *t_rules,
-				   fr_token_t prev, fr_type_t type, fr_sbuff_parse_rules_t const *bracket_rules)
+				   fr_token_t prev, fr_type_t type, fr_sbuff_parse_rules_t const *bracket_rules,
+				   fr_dict_attr_t const *da)
 {
 	xlat_exp_t	*lhs, *rhs, *node;
 	xlat_t		*func = NULL;
@@ -580,7 +607,7 @@ static ssize_t tokenize_expression(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flag
 	/*
 	 *	Get the LHS of the operation.
 	 */
-	slen = tokenize_field(ctx, &lhs, flags, &in, p_rules, t_rules, type, bracket_rules);
+	slen = tokenize_field(ctx, &lhs, flags, &in, p_rules, t_rules, type, bracket_rules, da);
 	if (slen <= 0) return slen;
 
 redo:
@@ -648,14 +675,19 @@ redo:
 	}
 
 	/*
-	 *	@todo - if the LHS is typed, perhaps try to parse the
-	 *	RHS as the given type?
+	 *	If the LHS is typed, try to parse the RHS as the given
+	 *	type.  Otherwise, don't parse the RHS using enums.
 	 */
+	if (lhs->type == XLAT_ATTRIBUTE) {
+		da = tmpl_da(lhs->attr);
+	} else {
+		da = NULL;
+	}
 
 	/*
 	 *	We now parse the RHS, allowing a (perhaps different) cast on the RHS.
 	 */
-	slen = tokenize_expression(ctx, &rhs, flags, &in, p_rules, t_rules, op, FR_TYPE_VOID, bracket_rules);
+	slen = tokenize_expression(ctx, &rhs, flags, &in, p_rules, t_rules, op, FR_TYPE_VOID, bracket_rules, da);
 	if (slen <= 0) {
 		talloc_free(lhs);
 		FR_SBUFF_ERROR_RETURN_ADJ(&in, slen);
@@ -740,7 +772,7 @@ ssize_t xlat_tokenize_expression(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_
 	if (!flags) flags = &my_flags;
 	
 	slen = tokenize_expression(ctx, head, flags, in, terminal_rules, t_rules, T_INVALID, FR_TYPE_VOID,
-				   bracket_rules);
+				   bracket_rules, NULL);
 	talloc_free(bracket_rules);
 	talloc_free(terminal_rules);
 	return slen;
