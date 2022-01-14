@@ -402,6 +402,8 @@ static ssize_t tokenize_field(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_t *
 	 *	If we have '(', then recurse for other expressions
 	 */
 check_more:
+	fr_sbuff_skip_whitespace(&in);
+
 	if (fr_sbuff_next_if_char(&in, '(')) {
 		/*
 		 *	Tokenize the sub-expression, ensuring that we stop at ')'.
@@ -525,10 +527,19 @@ check_more:
 			fr_value_box_copy(node, &node->data, enumv->value);
 		} else {
 		parse_other:
+			/*
+			 *	@todo - parsing 192.168.0.0/24 results in the parser getting excited over
+			 *	the '/'.  Instead the various parsers should likely be "greedy", as with
+			 *	fr_dict_enum_by_name_substr() above, and parse as much as they think makes
+			 *	sense.
+			 *
+			 *	Which means that the terminals are at least partly ignored, IFF the
+			 *	type-specific parser determines that a particular character is permitted.
+			 */
 			slen = fr_value_box_from_substr(node, &node->data, type, da, &in, p_rules, false);
 			if (slen <= 0) {
 			failed_value:
-				fr_strerror_printf("Failed parsing value");
+				fr_strerror_printf("Failed parsing value '%.5s'", fr_sbuff_current(&in));
 				FR_SBUFF_ERROR_RETURN_ADJ(&in, slen);
 			}
 		}
@@ -541,6 +552,8 @@ check_more:
 	}
 
 done:
+	fr_sbuff_skip_whitespace(&in);
+
 	if (unary) {
 		unary->child = node;
 		xlat_flags_merge(&unary->flags, &node->flags);

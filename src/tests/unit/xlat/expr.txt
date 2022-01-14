@@ -41,5 +41,21 @@ match %(cmp_eq:%{Service-Type} 2)
 xlat_expr 1 + (&Service-Type == Framed-User)
 match %(add:1 %(cmp_eq:%{Service-Type} 2))
 
+#
+#  Strings of various forms
+#
+xlat_expr &Filter-Id == "foo"
+match %(cmp_eq:%{Filter-Id}"foo")
+
+#
+#  THIS IS WRONG!
+#
+xlat_expr &Framed-IP-Address < (ipv4prefix) 192.168.0.0/24
+match %(cmp_lt:%{Framed-IP-Address}%(div:192.168.0.0/32 24)) XXX
+
+xlat_expr "foo" == "bar"
+match %(cmp_eq:"foo""bar")
+
+
 count
-match 27
+match 33
