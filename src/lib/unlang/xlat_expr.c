@@ -76,7 +76,8 @@ XLAT_BINARY_FUNC(and, T_AND)
 XLAT_BINARY_FUNC(or,  T_OR)
 XLAT_BINARY_FUNC(prepend,  T_OP_PREPEND)
 
-XLAT_BINARY_FUNC(cmp_eq,  T_OP_EQ)
+XLAT_BINARY_FUNC(cmp_eq,  T_OP_CMP_EQ)
+XLAT_BINARY_FUNC(cmp_ne,  T_OP_NE)
 XLAT_BINARY_FUNC(cmp_lt,  T_OP_LT)
 XLAT_BINARY_FUNC(cmp_le,  T_OP_LE)
 XLAT_BINARY_FUNC(cmp_gt,  T_OP_GT)
@@ -197,6 +198,7 @@ int xlat_register_expressions(void)
 	XLAT_REGISTER_BINARY_OP(prepend);
 
 	XLAT_REGISTER_BINARY_OP(cmp_eq);
+	XLAT_REGISTER_BINARY_OP(cmp_ne);
 	XLAT_REGISTER_BINARY_OP(cmp_lt);
 	XLAT_REGISTER_BINARY_OP(cmp_le);
 	XLAT_REGISTER_BINARY_OP(cmp_gt);
@@ -238,7 +240,8 @@ static const fr_sbuff_term_elem_t binary_ops[T_TOKEN_LAST] = {
 	[ T_LAND ]		= L("land"),
 	[ T_LOR ]		= L("lor"),
 
-	[ T_OP_EQ ]		= L("cmp_eq"),
+	[ T_OP_CMP_EQ ]		= L("cmp_eq"),
+	[ T_OP_NE ]		= L("cmp_ne"),
 	[ T_OP_LT ]		= L("cmp_lt"),
 	[ T_OP_LE ]		= L("cmp_le"),
 	[ T_OP_GT ]		= L("cmp_gt"),
