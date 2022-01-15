@@ -60,6 +60,17 @@ match %(cmp_lt:%{Framed-IP-Address} 192.168.0.0/24)
 xlat_expr 1 < 2 || 4 > 3
 match %(logical_or:%(cmp_lt:1 2)%(cmp_gt:4 3))
 
+xlat_expr 2 || (1 > 4)
+match %(logical_or:2 %(cmp_gt:1 4))
+
+xlat_expr &Filter-Id
+match %{Filter-Id}
+
+#
+#  @todo - for exec, xlat, etc., if we're doing an existence check of
+#  string / octets, then the check is for "length>0", NOT for parsing
+#  the contents of the data type.
+#
 
 count
-match 33
+match 39

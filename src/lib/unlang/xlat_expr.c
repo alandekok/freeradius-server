@@ -38,7 +38,7 @@ static xlat_arg_parser_t const binary_op_xlat_args[] = {
 
 static xlat_action_t xlat_binary_op(TALLOC_CTX *ctx, fr_dcursor_t *out,
 				    UNUSED xlat_ctx_t const *xctx,
-				    request_t *request, fr_value_box_list_t *in,
+				    UNUSED request_t *request, fr_value_box_list_t *in,
 				    fr_token_t op)
 {
 	int rcode;
@@ -52,7 +52,6 @@ static xlat_action_t xlat_binary_op(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	rcode = fr_value_calc_binary_op(dst, dst, FR_TYPE_NULL, a, op, b);
 	if (rcode < 0) {
 		talloc_free(dst);
-		RPEDEBUG("Failed calculating result");
 		return XLAT_ACTION_FAIL;
 	}
 
@@ -451,6 +450,8 @@ check_more:
 
 	/*
 	 *	Parse %{...}
+	 *
+	 *	Use the flags as input to xlat_tokenize_expr(), which control things like "needs_resolving".
 	 */
 	if (fr_sbuff_adv_past_str_literal(&in, "%{")) {
 		if (xlat_tokenize_expansion(ctx, &node, flags, &in, t_rules) < 0) {
@@ -464,9 +465,8 @@ check_more:
 	/*
 	 *	@todo - support %(xlat:...)
 	 *
-	 *	HOWEVER this use-case overlaps a bit with remainder,
-	 *	followed by something. i.e. "foo % (bar)".  So we have
-	 *	to be a bit careful about that.
+	 *	HOWEVER this use-case overlaps a bit with remainder, followed by something. i.e. "foo %
+	 *	(bar)".  So we have to be a bit careful about that.
 	 */
 	if (fr_sbuff_is_str(&in, "%(", 2)) {
 		fr_sbuff_marker_t marker;
@@ -559,6 +559,28 @@ check_more:
 	}
 
 done:
+	/*
+	 *	@todo - keep a flag to track if we create the cmp_foo / op_foo function.  And if so, check for
+	 *	input flags->pure.  If set, we call xlat_purify() to purify the results.  This capability lets
+	 *	us write tests for parsing which use simple numbers, to verify that the parser is OK.
+	 *
+	 *	And as a later optimization, lets us optimize the expressions at compile time instead of
+	 *	re-evaluating them at run-time.  Just like the old-style conditions.
+	 *
+	 *	For now, we only do this for our functions, as they don't use the "request" pointer for
+	 *	anything.  Instead, they rely on fr_strerror_printf(), which is fine for parsing.
+	 *
+	 *	The purify function should likely also assume that "pure" functions don't use the "request"
+	 *	pointer for anything, and instead call fr_strerror_printf().  This means that
+	 *	xlat_frame_eval_repeat() calls a function, it will need to check for func->flags.pure after
+	 *	getting XLAT_FAIL.  And then call RPEDEBUG itself.
+	 *
+	 *	If we really want to go crazy, we should always call pure functions with a NULL pointer for
+	 *	the "request" handle, but only when the *instance* is also marked "pure".  That's because a
+	 *	function might be "pure", but might depend on other functions which are not "pure", and
+	 *	therefore need a "request".
+	 */
+
 	fr_sbuff_skip_whitespace(&in);
 
 	if (unary) {
@@ -769,8 +791,9 @@ ssize_t xlat_tokenize_expression(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_
 	xlat_flags_t my_flags = { 0 };
 
 	/*
-	 *	If the terminal rules don't include a ')',
-	 *	then add it in.
+	 *	Whatever the caller passes, ensure that we have a
+	 *	terminal rule which ends on operators, and a terminal
+	 *	rule which ends on ')'.
 	 */
 	MEM(bracket_rules = talloc_zero(ctx, fr_sbuff_parse_rules_t));
 	MEM(terminal_rules = talloc_zero(ctx, fr_sbuff_parse_rules_t));
