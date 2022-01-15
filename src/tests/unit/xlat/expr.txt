@@ -66,6 +66,14 @@ match %(logical_or:2 %(cmp_gt:1 4))
 xlat_expr &Filter-Id
 match %{Filter-Id}
 
+xlat_expr %{md5:foo} + "foo"
+match %(op_add:%{md5:foo}"foo")
+
+xlat_expr %(op_add:4 3) + 6
+match %(op_add:%(op_add:4 3) 6)
+
+
+
 #
 #  @todo - for exec, xlat, etc., if we're doing an existence check of
 #  string / octets, then the check is for "length>0", NOT for parsing
@@ -73,4 +81,4 @@ match %{Filter-Id}
 #
 
 count
-match 39
+match 43

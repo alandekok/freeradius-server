@@ -461,24 +461,24 @@ check_more:
 		goto done;
 	}
 
-#if 0
 	/*
-	 *	@todo - support %(xlat:...)
+	 *	Parse %(xlat:...)
 	 *
-	 *	HOWEVER this use-case overlaps a bit with remainder, followed by something. i.e. "foo %
-	 *	(bar)".  So we have to be a bit careful about that.
+	 *	HOWEVER this use-case overlaps a bit with remainder, followed by something:
+	 *
+	 *		... foo % (bar) ...
+	 *
+	 *	The simple solution is to just ignore it, and give out crappy errors.  If the user wants a
+	 *	literal '%' followed by '(' to NOT be a function call, then the user can put a space between
+	 *	them.
 	 */
-	if (fr_sbuff_is_str(&in, "%(", 2)) {
-		fr_sbuff_marker_t marker;
+	if (fr_sbuff_adv_past_str_literal(&in, "%(")) {
+		if (xlat_tokenize_function_args(ctx, &node, flags, &in, t_rules) < 0) {
+			return -1;
+		}
 
-		fr_sbuff_marker(&marker, &in);
-
-		fr_sbuff_advance(&in, 2);
-
-		//
-
+		goto done;
 	}
-#endif
 
 	/*
 	 *	Else it's nothing we recognize.  Do some quick checks
@@ -486,9 +486,7 @@ check_more:
 	 */
 	if (type == FR_TYPE_VOID) {
 		/*
-		 *	@todo - we want to parse strings as "foo", but
-		 *	this doesn't quite seem to work yet.  Deeper
-		 *	investigation is warranted.
+		 *	@todo - also update the escaping rules, depending on kind of string we have.
 		 */
 		if (fr_sbuff_is_char(&in, '"') || fr_sbuff_is_char(&in, '\'') || fr_sbuff_is_char(&in, '`')) {
 			type = FR_TYPE_STRING;
