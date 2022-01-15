@@ -68,13 +68,13 @@ static xlat_action_t xlat_func_ ## _name(TALLOC_CTX *ctx, fr_dcursor_t *out, \
 	return xlat_binary_op(ctx, out, xctx, request, in, _op); \
 }
 
-XLAT_BINARY_FUNC(add, T_ADD)
-XLAT_BINARY_FUNC(sub, T_SUB)
-XLAT_BINARY_FUNC(mul, T_MUL)
-XLAT_BINARY_FUNC(div, T_DIV)
-XLAT_BINARY_FUNC(and, T_AND)
-XLAT_BINARY_FUNC(or,  T_OR)
-XLAT_BINARY_FUNC(prepend,  T_OP_PREPEND)
+XLAT_BINARY_FUNC(op_add, T_ADD)
+XLAT_BINARY_FUNC(op_sub, T_SUB)
+XLAT_BINARY_FUNC(op_mul, T_MUL)
+XLAT_BINARY_FUNC(op_div, T_DIV)
+XLAT_BINARY_FUNC(op_and, T_AND)
+XLAT_BINARY_FUNC(op_or,  T_OR)
+XLAT_BINARY_FUNC(op_prepend,  T_OP_PREPEND)
 
 XLAT_BINARY_FUNC(cmp_eq,  T_OP_CMP_EQ)
 XLAT_BINARY_FUNC(cmp_ne,  T_OP_NE)
@@ -181,7 +181,14 @@ static xlat_action_t xlat_func_unary_sub(TALLOC_CTX *ctx, fr_dcursor_t *out,
 #undef XLAT_REGISTER_BINARY_OP
 #define XLAT_REGISTER_BINARY_OP(_name) \
 do { \
-	if (!(xlat = xlat_register(NULL, STRINGIFY(_name), xlat_func_ ## _name, NULL))) return -1; \
+	if (!(xlat = xlat_register(NULL, "op_" STRINGIFY(_name), xlat_func_op_ ## _name, NULL))) return -1; \
+	xlat_func_args(xlat, binary_op_xlat_args); \
+} while (0)
+
+#undef XLAT_REGISTER_BINARY_CMP
+#define XLAT_REGISTER_BINARY_CMP(_name) \
+do { \
+	if (!(xlat = xlat_register(NULL, "cmp_" STRINGIFY(_name), xlat_func_cmp_ ## _name, NULL))) return -1; \
 	xlat_func_args(xlat, binary_op_xlat_args); \
 } while (0)
 
@@ -197,20 +204,20 @@ int xlat_register_expressions(void)
 	XLAT_REGISTER_BINARY_OP(or);
 	XLAT_REGISTER_BINARY_OP(prepend);
 
-	XLAT_REGISTER_BINARY_OP(cmp_eq);
-	XLAT_REGISTER_BINARY_OP(cmp_ne);
-	XLAT_REGISTER_BINARY_OP(cmp_lt);
-	XLAT_REGISTER_BINARY_OP(cmp_le);
-	XLAT_REGISTER_BINARY_OP(cmp_gt);
-	XLAT_REGISTER_BINARY_OP(cmp_ge);
+	XLAT_REGISTER_BINARY_CMP(eq);
+	XLAT_REGISTER_BINARY_CMP(ne);
+	XLAT_REGISTER_BINARY_CMP(lt);
+	XLAT_REGISTER_BINARY_CMP(le);
+	XLAT_REGISTER_BINARY_CMP(gt);
+	XLAT_REGISTER_BINARY_CMP(ge);
 
 	/*
 	 *	&&, ||
 	 */
-	if (!(xlat = xlat_register(NULL, "land", xlat_func_logical_and, NULL))) return -1;
+	if (!(xlat = xlat_register(NULL, "logical_and", xlat_func_logical_and, NULL))) return -1;
 	xlat_func_args(xlat, short_circuit_xlat_args);
 
-	if (!(xlat = xlat_register(NULL, "lor", xlat_func_logical_or, NULL))) return -1;
+	if (!(xlat = xlat_register(NULL, "logical_or", xlat_func_logical_or, NULL))) return -1;
 	xlat_func_args(xlat, short_circuit_xlat_args);
 
 	/*
@@ -230,15 +237,15 @@ int xlat_register_expressions(void)
  *	Must use the same names as above.
  */
 static const fr_sbuff_term_elem_t binary_ops[T_TOKEN_LAST] = {
-	[ T_ADD ]		= L("add"),
-	[ T_SUB ]		= L("sub"),
-	[ T_MUL ]		= L("mul"),
-	[ T_DIV ]		= L("div"),
-	[ T_AND ]		= L("and"),
-	[ T_OR ]		= L("or"),
+	[ T_ADD ]		= L("op_add"),
+	[ T_SUB ]		= L("op_sub"),
+	[ T_MUL ]		= L("op_mul"),
+	[ T_DIV ]		= L("op_div"),
+	[ T_AND ]		= L("op_and"),
+	[ T_OR ]		= L("op_or"),
 
-	[ T_LAND ]		= L("land"),
-	[ T_LOR ]		= L("lor"),
+	[ T_LAND ]		= L("logical_and"),
+	[ T_LOR ]		= L("logical_or"),
 
 	[ T_OP_CMP_EQ ]		= L("cmp_eq"),
 	[ T_OP_NE ]		= L("cmp_ne"),
@@ -569,16 +576,18 @@ done:
 /*
  *	Lexigraphically sorted!
  */
-static fr_table_num_sorted_t const expr_assignment_op_table[] = {
+static fr_table_num_ordered_t const expr_assignment_op_table[] = {
 	{ L("!="),	T_OP_NE			},
 
 	{ L("&"),	T_AND			},
+	{ L("&&"),	T_LAND			},
 	{ L("*"),	T_MUL			},
 	{ L("+"),	T_ADD			},
 	{ L("-"),	T_SUB			},
 	{ L("/"),	T_DIV			},
 
 	{ L("|"),	T_OR			},
+	{ L("||"),	T_LOR			},
 
 	{ L("<"),	T_OP_LT			},
 	{ L("<<"),	T_LSHIFT    		},
@@ -590,6 +599,7 @@ static fr_table_num_sorted_t const expr_assignment_op_table[] = {
 	{ L(">"),	T_OP_GT			},
 	{ L(">="),	T_OP_GE			},
 	{ L(">>"),	T_RSHIFT    		},
+
 };
 static size_t const expr_assignment_op_table_len = NUM_ELEMENTS(expr_assignment_op_table);
 
