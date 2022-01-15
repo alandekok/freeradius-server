@@ -172,10 +172,6 @@ static int xlat_tokenize_string(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_t
 				 fr_sbuff_t *in, bool brace,
 				 fr_sbuff_parse_rules_t const *p_rules, tmpl_rules_t const *t_rules);
 
-static inline int xlat_tokenize_function_args(TALLOC_CTX *ctx, xlat_exp_t **head,
-					      xlat_flags_t *flags, fr_sbuff_t *in,
-					      tmpl_rules_t const *rules);
-
 static inline int xlat_tokenize_alternation(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_t *flags, fr_sbuff_t *in,
 					    tmpl_rules_t const *t_rules, bool func_args)
 {
@@ -450,9 +446,9 @@ int xlat_validate_function_args(xlat_exp_t *node)
  *	- 0 if the string was parsed into a function.
  *	- <0 on parse error.
  */
-static inline int xlat_tokenize_function_args(TALLOC_CTX *ctx, xlat_exp_t **head,
-					      xlat_flags_t *flags, fr_sbuff_t *in,
-					      tmpl_rules_t const *rules)
+int xlat_tokenize_function_args(TALLOC_CTX *ctx, xlat_exp_t **head,
+				xlat_flags_t *flags, fr_sbuff_t *in,
+				tmpl_rules_t const *rules)
 {
 	xlat_exp_t		*node;
 	xlat_t			*func;

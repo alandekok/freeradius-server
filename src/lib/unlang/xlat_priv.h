@@ -288,6 +288,10 @@ int		xlat_register_expressions(void);
 int		xlat_tokenize_expansion(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_t *flags, fr_sbuff_t *in,
 					tmpl_rules_t const *t_rules);
 
+int		xlat_tokenize_function_args(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_t *flags, fr_sbuff_t *in,
+					    tmpl_rules_t const *rules);
+
+
 #ifdef __cplusplus
 }
 #endif
