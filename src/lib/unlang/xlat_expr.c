@@ -30,6 +30,58 @@ RCSID("$Id$")
 #include <freeradius-devel/unlang/xlat_priv.h>
 #include <freeradius-devel/util/calc.h>
 
+static xlat_arg_parser_t const cast_xlat_args[] = {
+	{ .required = true, .type = FR_TYPE_INT32 },
+	{ .required = true, .type = FR_TYPE_VOID },
+	XLAT_ARG_PARSER_TERMINATOR
+};
+
+static xlat_action_t xlat_func_cast(TALLOC_CTX *ctx, fr_dcursor_t *out,
+				    UNUSED xlat_ctx_t const *xctx,
+				    UNUSED request_t *request, fr_value_box_list_t *in)
+{
+	fr_value_box_t	*dst, *a, *b;
+
+	a = fr_dlist_head(in);
+	fr_assert(a->vb_uint32 > FR_TYPE_NULL);
+	fr_assert(a->vb_uint32 < FR_TYPE_MAX);
+
+	MEM(dst = fr_value_box_alloc_null(ctx)); /* value_box_cast will over-write it anyways */
+
+	b = fr_dlist_next(in, a);
+
+	/*
+	 *	We only call this "cast" function when the *next* expansion can't be parsed statically at
+	 *	compile time.  Therefore the next expansion is itself an xlat (attribute, exec, etc.)  We
+	 *	therefore have special rules for casting them to bool.
+	 */
+	if (a->vb_uint32 == FR_TYPE_BOOL) {
+		switch (b->type) {
+		case FR_TYPE_STRING:
+		case FR_TYPE_OCTETS:
+			fr_value_box_init(dst, FR_TYPE_BOOL, NULL, false);
+			dst->vb_bool = (b->vb_length > 0);
+			goto done;
+
+		default:
+			break;
+		}
+	}
+
+	/*
+	 *	Everything else gets cast via the value-box functions, which look for things like "yes" or
+	 *	"no" for booleans.
+	 */
+	if (fr_value_box_cast(ctx, dst, a->vb_uint32, NULL, b) < 0) {
+		talloc_free(dst);
+		return XLAT_ACTION_FAIL;
+	}
+
+done:
+	fr_dcursor_append(out, dst);
+	return XLAT_ACTION_DONE;
+}
+
 static xlat_arg_parser_t const binary_op_xlat_args[] = {
 	{ .required = true, .type = FR_TYPE_VOID },
 	{ .required = true, .type = FR_TYPE_VOID },
@@ -100,7 +152,7 @@ static xlat_action_t xlat_func_logical_and(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	b = fr_dlist_next(in, a);
 
 	/*
-	 *	@todo - short-circuit stuff
+	 *	@todo - short-circuit stuff inside of xlat_eval, not here.
 	 */
 	dst->vb_bool = a->vb_bool && b->vb_bool;
 
@@ -121,7 +173,7 @@ static xlat_action_t xlat_func_logical_or(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	b = fr_dlist_next(in, a);
 
 	/*
-	 *	@todo - short-circuit stuff
+	 *	@todo - short-circuit stuff inside of xlat_eval, not here.
 	 */
 	dst->vb_bool = a->vb_bool || b->vb_bool;
 
@@ -180,14 +232,14 @@ static xlat_action_t xlat_func_unary_sub(TALLOC_CTX *ctx, fr_dcursor_t *out,
 #undef XLAT_REGISTER_BINARY_OP
 #define XLAT_REGISTER_BINARY_OP(_name) \
 do { \
-	if (!(xlat = xlat_register(NULL, "op_" STRINGIFY(_name), xlat_func_op_ ## _name, NULL))) return -1; \
+	if (!(xlat = xlat_register(NULL, "op_" STRINGIFY(_name), xlat_func_op_ ## _name, XLAT_FLAG_PURE))) return -1; \
 	xlat_func_args(xlat, binary_op_xlat_args); \
 } while (0)
 
 #undef XLAT_REGISTER_BINARY_CMP
 #define XLAT_REGISTER_BINARY_CMP(_name) \
 do { \
-	if (!(xlat = xlat_register(NULL, "cmp_" STRINGIFY(_name), xlat_func_cmp_ ## _name, NULL))) return -1; \
+	if (!(xlat = xlat_register(NULL, "cmp_" STRINGIFY(_name), xlat_func_cmp_ ## _name, XLAT_FLAG_PURE))) return -1; \
 	xlat_func_args(xlat, binary_op_xlat_args); \
 } while (0)
 
@@ -213,21 +265,27 @@ int xlat_register_expressions(void)
 	/*
 	 *	&&, ||
 	 */
-	if (!(xlat = xlat_register(NULL, "logical_and", xlat_func_logical_and, NULL))) return -1;
+	if (!(xlat = xlat_register(NULL, "logical_and", xlat_func_logical_and, XLAT_FLAG_PURE))) return -1;
 	xlat_func_args(xlat, short_circuit_xlat_args);
 
-	if (!(xlat = xlat_register(NULL, "logical_or", xlat_func_logical_or, NULL))) return -1;
+	if (!(xlat = xlat_register(NULL, "logical_or", xlat_func_logical_or, XLAT_FLAG_PURE))) return -1;
 	xlat_func_args(xlat, short_circuit_xlat_args);
 
 	/*
 	 *	-EXPR
 	 *	!EXPR
 	 */
-	if (!(xlat = xlat_register(NULL, "minus", xlat_func_unary_sub, NULL))) return -1;
+	if (!(xlat = xlat_register(NULL, "minus", xlat_func_unary_sub, XLAT_FLAG_PURE))) return -1;
 	xlat_func_args(xlat, unary_sub_xlat_args);
 	
-	if (!(xlat = xlat_register(NULL, "not", xlat_func_unary_not, NULL))) return -1;
+	if (!(xlat = xlat_register(NULL, "not", xlat_func_unary_not, XLAT_FLAG_PURE))) return -1;
 	xlat_func_args(xlat, unary_not_xlat_args);
+
+	/*
+	 *	Our casting function.
+	 */
+	if (!(xlat = xlat_register(NULL, "cast", xlat_func_cast, XLAT_FLAG_PURE))) return -1;
+	xlat_func_args(xlat, cast_xlat_args);
 
 	return 0;
 }
@@ -317,10 +375,6 @@ static ssize_t tokenize_expression(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flag
  *	as a special case, <type> is a cast.  Which lets us know how
  *	to parse the next thing we get.  Otherwise, parse the thing as
  *	int64_t.
- *
- *	@todo - have updated parse rules which stop at any of the
- *	operators we accept.  This allows us to parse attribute
- *	references.
  */
 static ssize_t tokenize_field(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_t *flags, fr_sbuff_t *input,
 			      fr_sbuff_parse_rules_t const *p_rules, tmpl_rules_t const *t_rules,
@@ -329,7 +383,9 @@ static ssize_t tokenize_field(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_t *
 	ssize_t		slen;
 	xlat_exp_t	*node = NULL;
 	xlat_exp_t	*unary = NULL;
+	xlat_exp_t	*cast = NULL;
 	xlat_t		*func = NULL;
+	TALLOC_CTX	*free_ctx = NULL;
 	fr_sbuff_t	in = FR_SBUFF(input);
 
 	/*
@@ -357,12 +413,18 @@ static ssize_t tokenize_field(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_t *
 		MEM(unary = xlat_exp_alloc(ctx, XLAT_FUNC, func->name, strlen(func->name)));
 		unary->call.func = func;
 		unary->flags = func->flags;
-		ctx = unary;
+		free_ctx = ctx = unary;
 	}
 	
 	/*
-	 *	Allow for casts, if the caller hasn't already
-	 *	specified that.
+	 *	Allow for casts, if the caller hasn't already specified that.
+	 *
+	 *	For immediate value-boxes, the cast is an instruction on how to parse the current input
+	 *	string.  For run-time expansions, the cast is an instruction on how to parse the output of the
+	 *	run-time expansion.  As such, we need to save it via an xlat_cast() function.
+	 *
+	 *	But we don't know this until we parse the next thing, and we want all of the talloc parenting
+	 *	to be correct.  So we might as well always create a cast, and then reparent things later.
 	 */
 	if (type == FR_TYPE_VOID) {
 		char end = '\0';
@@ -392,16 +454,46 @@ static ssize_t tokenize_field(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_t *
 		if (!fr_type_is_leaf(type)) {
 			fr_strerror_printf("Cannot cast to structural data type");
 			fr_sbuff_set(&in, &marker);
+			talloc_free(unary);
 			FR_SBUFF_ERROR_RETURN(&in);
 		}
 
 		fr_sbuff_skip_whitespace(&in);
 		if (!fr_sbuff_is_char(&in, end)) {
 			fr_strerror_printf("Unexpected text after cast data type");
+			talloc_free(unary);
 			FR_SBUFF_ERROR_RETURN(&in);
 		}
 
 		fr_sbuff_advance(&in, 1);
+
+#if 0
+		/*
+		 *	Create a "cast" node.  The LHS is a UINT32 value-box of the cast type.  The RHS is
+		 *	whatever "node" comes next.
+		 */
+		MEM(cast = xlat_exp_alloc(ctx, XLAT_FUNC, "cast", 4));
+		cast->call.func = xlat_func_find("cast", 4);
+		fr_assert(cast->call.func != NULL);
+		cast->flags = cast->call.func->flags;
+
+		/*
+		 *	Create a LHS child UINT32
+		 */
+		MEM(node = xlat_exp_alloc_null(cast));
+		xlat_exp_set_name_buffer_shallow(node,
+						 talloc_strdup(node,
+							       fr_table_str_by_value(fr_value_box_type_table, type, "<INVALID>")));
+
+		fr_value_box_init(&node->data, FR_TYPE_UINT32, NULL, false);
+		node->data.vb_uint32 = type;
+
+		cast->child = node;
+		ctx = cast;
+		if (!free_ctx) free_ctx = cast;
+
+		node = NULL;
+#endif
 	}
 
 	/*
@@ -416,11 +508,13 @@ check_more:
 		 */
 		slen = tokenize_expression(ctx, &node, flags, &in, bracket_rules, t_rules, T_INVALID, type, bracket_rules, da);
 		if (slen <= 0) {
+			talloc_free(free_ctx);
 			FR_SBUFF_ERROR_RETURN_ADJ(&in, slen);
 		}
 
 		if (!fr_sbuff_next_if_char(&in, ')')) {
 			fr_strerror_printf("Failed to find trailing ')'");
+			talloc_free(free_ctx);
 			FR_SBUFF_ERROR_RETURN_ADJ(&in, -slen);
 		}
 
@@ -439,6 +533,7 @@ check_more:
 		slen = tmpl_afrom_attr_substr(node, NULL, &vpt, &in, p_rules, t_rules);
 		if (slen <= 0) {
 			talloc_free(node);
+			talloc_free(free_ctx);
 			FR_SBUFF_ERROR_RETURN_ADJ(&in, slen);
 		}
 
@@ -455,6 +550,7 @@ check_more:
 	 */
 	if (fr_sbuff_adv_past_str_literal(&in, "%{")) {
 		if (xlat_tokenize_expansion(ctx, &node, flags, &in, t_rules) < 0) {
+			talloc_free(free_ctx);
 			return -1;
 		}
 
@@ -474,6 +570,7 @@ check_more:
 	 */
 	if (fr_sbuff_adv_past_str_literal(&in, "%(")) {
 		if (xlat_tokenize_function_args(ctx, &node, flags, &in, t_rules) < 0) {
+			talloc_free(free_ctx);
 			return -1;
 		}
 
@@ -483,6 +580,10 @@ check_more:
 	/*
 	 *	Else it's nothing we recognize.  Do some quick checks
 	 *	to see what it might be.
+	 *
+	 *	@todo - we probably also want to "upcast" IP addresses to prefixes, so that we can do things
+	 *	like check (&Framed-IP-Address < 192.168/16), so that the user doesn't always have to specify
+	 *	the data types.
 	 */
 	if (type == FR_TYPE_VOID) {
 		/*
@@ -545,6 +646,7 @@ check_more:
 			if (slen <= 0) {
 			failed_value:
 				fr_strerror_printf("Failed parsing value '%.5s'", fr_sbuff_current(&in));
+				talloc_free(free_ctx);
 				FR_SBUFF_ERROR_RETURN_ADJ(&in, slen);
 			}
 		}
@@ -581,6 +683,21 @@ done:
 
 	fr_sbuff_skip_whitespace(&in);
 
+	/*
+	 *	Wrap the result in a cast.
+	 *
+	 *	@todo - if the node is an XLAT_ATTR or XLAT_BOX, and is already of the correct data type, then
+	 *	reparent "node" to the parent of "cast", and free "cast".
+	 */
+	if (cast) {
+		cast->child->next = node;
+		xlat_flags_merge(&cast->flags, &node->flags);
+		node = cast;
+	}
+
+	/*
+	 *	@todo - if the node is an XLAT_BOX, and we have flags->pure, then purify the node.
+	 */
 	if (unary) {
 		unary->child = node;
 		xlat_flags_merge(&unary->flags, &node->flags);
@@ -738,6 +855,14 @@ redo:
 
 	func = xlat_func_find(binary_ops[op].str, binary_ops[op].len);
 	fr_assert(func != NULL);
+
+	/*
+	 *	Check if we need to purify the output.
+	 */
+	if (flags->pure && (lhs->type == XLAT_BOX) && (rhs->type == XLAT_BOX)) {
+		// create a fr_value_box_list from the two boxes, and call our function, which then gets us a
+		// value-box as output.  We then create free RHS, and put the box into LHS
+	}
 
 	/*
 	 *	Create the function node, with the LHS / RHS arguments.
