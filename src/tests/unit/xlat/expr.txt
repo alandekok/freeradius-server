@@ -23,14 +23,14 @@ match %(op_mul:%(op_add:2 3)%(op_add:4 5))
 xlat_expr (2 + 3) * 4 + 5
 match %(op_add:%(op_mul:%(op_add:2 3) 4) 5)
 
-xlat_expr &Filter-Id + 5
-match %(op_add:%{Filter-Id} 5)
+xlat_expr &NAS-Port + 5
+match %(op_add:%{NAS-Port} 5)
 
 xlat_expr &Framed-IP-Address & 0xffff0000
-match %(op_and:%{Framed-IP-Address} 4294901760)
+match %(op_and:%{Framed-IP-Address} 255.255.0.0)
 
 xlat_expr %{Framed-IP-Address} + 4
-match %(op_add:%{Framed-IP-Address} 4)
+match %(op_add:%{Framed-IP-Address} 0.0.0.4)
 
 xlat_expr 1 < 4
 match %(cmp_lt:1 4)

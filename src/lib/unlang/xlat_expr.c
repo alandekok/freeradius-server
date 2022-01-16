@@ -376,7 +376,7 @@ static ssize_t tokenize_expression(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flag
  *	to parse the next thing we get.  Otherwise, parse the thing as
  *	int64_t.
  */
-static ssize_t tokenize_field(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_t *flags, fr_sbuff_t *input,
+static ssize_t tokenize_field(TALLOC_CTX *input_ctx, xlat_exp_t **head, xlat_flags_t *flags, fr_sbuff_t *input,
 			      fr_sbuff_parse_rules_t const *p_rules, tmpl_rules_t const *t_rules,
 			      fr_type_t type, fr_sbuff_parse_rules_t const *bracket_rules, fr_dict_attr_t const *da)
 {
@@ -385,6 +385,7 @@ static ssize_t tokenize_field(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_t *
 	xlat_exp_t	*unary = NULL;
 	xlat_exp_t	*cast = NULL;
 	xlat_t		*func = NULL;
+	TALLOC_CTX	*ctx = input_ctx;
 	TALLOC_CTX	*free_ctx = NULL;
 	fr_sbuff_t	in = FR_SBUFF(input);
 
@@ -494,6 +495,18 @@ static ssize_t tokenize_field(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_t *
 
 		node = NULL;
 #endif
+
+		/*
+		 *	We're casting to a type which is different from the input "da".  Which means that we
+		 *	can't parse the type using enums from that "da".
+		 *
+		 *	We MAY be casting the value to the same type as the input "da".  However, we don't
+		 *	(yet) know if we can drop the cast, as the RHS could be an attribute, expansion, or a
+		 *	value-box.  Let's be safe and leave the cast alone until we know which one it is.
+		 */
+		if (da && (da->type != type)) {
+			da = NULL;
+		}
 	}
 
 	/*
@@ -586,11 +599,15 @@ check_more:
 	 *	the data types.
 	 */
 	if (type == FR_TYPE_VOID) {
-		/*
-		 *	@todo - also update the escaping rules, depending on kind of string we have.
-		 */
-		if (fr_sbuff_is_char(&in, '"') || fr_sbuff_is_char(&in, '\'') || fr_sbuff_is_char(&in, '`')) {
+		if (da) {
+			type = da->type;
+
+		} else if (fr_sbuff_is_char(&in, '"') || fr_sbuff_is_char(&in, '\'') || fr_sbuff_is_char(&in, '`')) {
+			/*
+			 *	@todo - also update the escaping rules, depending on kind of string we have.
+			 */
 			type = FR_TYPE_STRING;
+
 		} else {			
 			type = FR_TYPE_INT64;
 		}
@@ -607,6 +624,18 @@ check_more:
 
 		fr_sbuff_marker(&marker, &in);
 
+#if 0
+		/*
+		 *	If there's a cast, then remove it.  We have a cast in "type", so the value-box MUST be
+		 *	parsed as that type, or it else parsing fails.  There's no reason to parse something
+		 *	as a particular type, and then immediately cast it to that type.
+		 */
+		if (cast) {
+			TALLOC_FREE(cast);
+			ctx = unary ? unary : input_ctx;
+		}
+#endif
+
 		MEM(node = xlat_exp_alloc_null(ctx));
 		xlat_exp_set_type(node, XLAT_BOX);
 
@@ -621,6 +650,8 @@ check_more:
 		if (da) {
 			fr_dict_enum_value_t *enumv;
 
+			fr_assert(da->type == type);
+
 			slen = fr_dict_enum_by_name_substr(&enumv, da, &in);
 			if (slen == 0) {
 				da = NULL;
@@ -634,13 +665,8 @@ check_more:
 		} else {
 		parse_other:
 			/*
-			 *	@todo - parsing 192.168.0.0/24 results in the parser getting excited over
-			 *	the '/'.  Instead the various parsers should likely be "greedy", as with
-			 *	fr_dict_enum_by_name_substr() above, and parse as much as they think makes
-			 *	sense.
-			 *
-			 *	Which means that the terminals are at least partly ignored, IFF the
-			 *	type-specific parser determines that a particular character is permitted.
+			 *	Note that this allows "192.168/24" if the type-specific parser allows it, even
+			 *	if '/' is a terminal character.
 			 */
 			slen = fr_value_box_from_substr(node, &node->data, type, da, &in, p_rules, false);
 			if (slen <= 0) {
@@ -686,8 +712,8 @@ done:
 	/*
 	 *	Wrap the result in a cast.
 	 *
-	 *	@todo - if the node is an XLAT_ATTR or XLAT_BOX, and is already of the correct data type, then
-	 *	reparent "node" to the parent of "cast", and free "cast".
+	 *	@todo - if the node is an XLAT_ATTR or XLAT_BOX and is already of the correct data type, then reparent
+	 *	"node" to the parent of "cast", and free "cast".
 	 */
 	if (cast) {
 		cast->child->next = node;
