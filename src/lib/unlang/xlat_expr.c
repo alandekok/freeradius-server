@@ -277,16 +277,16 @@ int xlat_register_expressions(void)
 	 *	-EXPR
 	 *	!EXPR
 	 */
-	if (!(xlat = xlat_register(NULL, "minus", xlat_func_unary_sub, XLAT_FLAG_PURE))) return -1;
+	if (!(xlat = xlat_register(NULL, "unary_minus", xlat_func_unary_sub, XLAT_FLAG_PURE))) return -1;
 	xlat_func_args(xlat, unary_sub_xlat_args);
 	
-	if (!(xlat = xlat_register(NULL, "not", xlat_func_unary_not, XLAT_FLAG_PURE))) return -1;
+	if (!(xlat = xlat_register(NULL, "unary_not", xlat_func_unary_not, XLAT_FLAG_PURE))) return -1;
 	xlat_func_args(xlat, unary_not_xlat_args);
 
 	/*
 	 *	Our casting function.
 	 */
-	if (!(xlat = xlat_register(NULL, "cast", xlat_func_cast, XLAT_FLAG_PURE))) return -1;
+	if (!(xlat = xlat_register(NULL, "cast_expression", xlat_func_cast, XLAT_FLAG_PURE))) return -1;
 	xlat_func_args(xlat, cast_xlat_args);
 
 	return 0;
@@ -404,11 +404,11 @@ static ssize_t tokenize_field(TALLOC_CTX *input_ctx, xlat_exp_t **head, xlat_fla
 	 *	we allocate.
 	 */
 	if (fr_sbuff_next_if_char(&in, '!')) { /* unary not */
-		func = xlat_func_find("not", 3);
+		func = xlat_func_find("unary_not", 9);
 		fr_assert(func != NULL);
 	}
 	else if (fr_sbuff_next_if_char(&in, '-')) { /* unary minus */
-		func = xlat_func_find("minus", 5);
+		func = xlat_func_find("unary_minus", 11);
 		fr_assert(func != NULL);
 	}
 	else if (fr_sbuff_next_if_char(&in, '+')) { /* ignore unary + */
@@ -482,7 +482,7 @@ static ssize_t tokenize_field(TALLOC_CTX *input_ctx, xlat_exp_t **head, xlat_fla
 		 *	whatever "node" comes next.
 		 */
 		MEM(cast = xlat_exp_alloc(ctx, XLAT_FUNC, "cast", 4));
-		cast->call.func = xlat_func_find("cast", 4);
+		cast->call.func = xlat_func_find("cast_expression", 15);
 		fr_assert(cast->call.func != NULL);
 		cast->flags = cast->call.func->flags;
 
@@ -738,6 +738,12 @@ done:
 	 *	"node" to the parent of "cast", and free "cast".
 	 */
 	if (cast) {
+		if ((node->type == XLAT_BOX) && (node->data.type == cast->child->data.vb_uint8)) {
+			talloc_steal(talloc_parent(cast), node);
+			talloc_free(cast);
+			goto check_unary;
+		}
+
 		fr_assert(cast->child);
 		cast->child->next = node;
 		xlat_flags_merge(&cast->flags, &node->flags);
@@ -747,6 +753,7 @@ done:
 	/*
 	 *	@todo - if the node is an XLAT_BOX, and we have flags->pure, then purify the node.
 	 */
+check_unary:
 	if (unary) {
 		unary->child = node;
 		xlat_flags_merge(&unary->flags, &node->flags);
@@ -905,6 +912,10 @@ redo:
 
 	/*
 	 *	Check if we need to purify the output.
+	 *
+	 *	@todo - also if the have differenting data types on the LHS and RHS, and one of them is an
+	 *	XLAT_BOX, then try to upcast the XLAT_BOX to the destination data type before returning.  This
+	 *	optimization minimizes the amount of run-time work we have to do.
 	 */
 	if (flags->pure && (lhs->type == XLAT_BOX) && (rhs->type == XLAT_BOX)) {
 		// create a fr_value_box_list from the two boxes, and call our function, which then gets us a

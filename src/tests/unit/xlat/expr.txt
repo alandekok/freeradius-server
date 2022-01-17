@@ -51,11 +51,12 @@ xlat_expr "foo" == "bar"
 match %(cmp_eq:"foo""bar")
 
 # note '/' is a prefix, not "divide by 24".
+# and a useless cast is removed
 xlat_expr &Framed-IP-Address < (ipv4prefix) 192.168.0.0/24
-match %(cmp_lt:%{Framed-IP-Address}%(cast:ipv4prefix 192.168.0.0/24))
+match %(cmp_lt:%{Framed-IP-Address} 192.168.0.0/24)
 
 xlat_expr &Framed-IP-Address < (ipv4prefix) 192.168.0.0
-match %(cmp_lt:%{Framed-IP-Address}%(cast:ipv4prefix 192.168.0.0/32))
+match %(cmp_lt:%{Framed-IP-Address} 192.168.0.0/32)
 
 #
 #  For IP addresses, the other side is automatically upcast to a prefix
@@ -66,7 +67,7 @@ match %(cmp_lt:%{Framed-IP-Address}%(cast:ipv4prefix 192.168.0.0/32))
 
 #  same as above, but swap the order
 xlat_expr (ipv4prefix) 192.168.0.0/24 > &Framed-IP-Address
-match %(cmp_gt:%(cast:ipv4prefix 192.168.0.0/24)%{Framed-IP-Address})
+match %(cmp_gt:192.168.0.0/24 %{Framed-IP-Address})
 
 #
 #  Logical && and ||
@@ -87,6 +88,11 @@ xlat_expr %(op_add:4 3) + 6
 match %(op_add:%(op_add:4 3) 6)
 
 
+#
+#  useless casts are omitted.
+#
+xlat_expr 1 < (uint32) 2
+match %(cmp_lt:1 2)
 
 #
 #  @todo - for exec, xlat, etc., if we're doing an existence check of
@@ -95,4 +101,4 @@ match %(op_add:%(op_add:4 3) 6)
 #
 
 count
-match 47
+match 49
