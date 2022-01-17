@@ -330,8 +330,6 @@ int		xlat_func_args(xlat_t *xlat, xlat_arg_parser_t const args[]) CC_HINT(nonnul
 
 int		xlat_func_mono(xlat_t *xlat, xlat_arg_parser_t const *arg) CC_HINT(nonnull);
 
-void		xlat_internal(xlat_t *xlat);
-
 ssize_t		xlat_tokenize_expression(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_t *flags, fr_sbuff_t *in,
 					 fr_sbuff_parse_rules_t const *p_rules, tmpl_rules_t const *t_rules);
 

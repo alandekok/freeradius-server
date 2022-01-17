@@ -230,12 +230,15 @@ static xlat_action_t xlat_func_unary_sub(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	fr_dcursor_append(out, dst);
 	return XLAT_ACTION_DONE;
 }
-
+/*
+ *	@todo - have a field in the xlat_t
+ */
 #undef XLAT_REGISTER_BINARY_OP
 #define XLAT_REGISTER_BINARY_OP(_name) \
 do { \
 	if (!(xlat = xlat_register(NULL, "op_" STRINGIFY(_name), xlat_func_op_ ## _name, XLAT_FLAG_PURE))) return -1; \
 	xlat_func_args(xlat, binary_op_xlat_args); \
+	xlat_internal(xlat); \
 } while (0)
 
 #undef XLAT_REGISTER_BINARY_CMP
@@ -243,6 +246,7 @@ do { \
 do { \
 	if (!(xlat = xlat_register(NULL, "cmp_" STRINGIFY(_name), xlat_func_cmp_ ## _name, XLAT_FLAG_PURE))) return -1; \
 	xlat_func_args(xlat, binary_op_xlat_args); \
+	xlat_internal(xlat); \
 } while (0)
 
 int xlat_register_expressions(void)
@@ -269,9 +273,11 @@ int xlat_register_expressions(void)
 	 */
 	if (!(xlat = xlat_register(NULL, "logical_and", xlat_func_logical_and, XLAT_FLAG_PURE))) return -1;
 	xlat_func_args(xlat, short_circuit_xlat_args);
+	xlat_internal(xlat);
 
 	if (!(xlat = xlat_register(NULL, "logical_or", xlat_func_logical_or, XLAT_FLAG_PURE))) return -1;
 	xlat_func_args(xlat, short_circuit_xlat_args);
+	xlat_internal(xlat);
 
 	/*
 	 *	-EXPR
@@ -279,15 +285,18 @@ int xlat_register_expressions(void)
 	 */
 	if (!(xlat = xlat_register(NULL, "unary_minus", xlat_func_unary_sub, XLAT_FLAG_PURE))) return -1;
 	xlat_func_args(xlat, unary_sub_xlat_args);
+	xlat_internal(xlat);
 	
 	if (!(xlat = xlat_register(NULL, "unary_not", xlat_func_unary_not, XLAT_FLAG_PURE))) return -1;
 	xlat_func_args(xlat, unary_not_xlat_args);
+	xlat_internal(xlat);
 
 	/*
 	 *	Our casting function.
 	 */
 	if (!(xlat = xlat_register(NULL, "cast_expression", xlat_func_cast, XLAT_FLAG_PURE))) return -1;
 	xlat_func_args(xlat, cast_xlat_args);
+	xlat_internal(xlat);
 
 	return 0;
 }

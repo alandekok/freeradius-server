@@ -42,6 +42,7 @@ typedef struct xlat_s {
 	fr_rb_node_t		node;			//!< Entry in the xlat function tree.
 	char const		*name;			//!< Name of xlat function.
 	xlat_func_t		func;			//!< async xlat function (async unsafe).
+
 	bool			internal;		//!< If true, cannot be redefined.
 
 	module_inst_ctx_t const	*mctx;			//!< Original module instantiation ctx if this
@@ -230,6 +231,16 @@ static inline void xlat_exp_set_name_buffer_shallow(xlat_exp_t *node, char const
 {
 	if (node->fmt) talloc_const_free(node->fmt);
 	node->fmt = fmt;
+}
+
+
+/** Mark an xlat function as internal
+ *
+ * @param[in] xlat to mark as internal.
+ */
+static inline void xlat_internal(xlat_t *xlat)
+{
+	xlat->internal = true;
 }
 
 
