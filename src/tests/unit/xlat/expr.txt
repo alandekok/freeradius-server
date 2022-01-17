@@ -100,5 +100,8 @@ match %(cmp_lt:1 2)
 #  the contents of the data type.
 #
 
+xlat_expr 1 < 2 < 3
+match %(cmp_lt:%(cmp_lt:1 2) 3)
+
 count
 match 49

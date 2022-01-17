@@ -30,6 +30,34 @@ RCSID("$Id$")
 #include <freeradius-devel/unlang/xlat_priv.h>
 #include <freeradius-devel/util/calc.h>
 
+/*
+ *	The new tokenizer accepts most things which are accepted by the old one.  Many of the errors will be
+ *	different, though.
+ *
+ *	@todo - add special / internal flags to xlat_t which mark it as an expression (unary, binary,
+ *	operator, etc.).  These flags should be checked only by xlat_print(), so that we can print the new
+ *	expressions in a sane form.
+ *
+ *	@todo - add a "output" fr_type_t to xlat_t, which is mainly used by the comparison functions.  Right
+ *	now it will happily parse things like:
+ *
+ *		(1 < 2) < 3
+ *
+ *	though the result of (1 < 2) is a boolean, so the result is always true.  We probably want to have
+ *	that as a compile-time error / check.
+ *
+ *	@todo - Regular expressions are not handled.  This isn't a lot of work, but can be a bit finicky.
+ *
+ *	@todo - short-circuit && / || need to be updated.  This requires various magic in their instantiation
+ *	routines, which is not yet done.
+ *
+ *	@todo - we should have an xlat_purify() function, but that may require other changes to the code.  See
+ *	comments below.
+ *
+ *	@todo - for existence checks, we should add a "cast to bool" node, so that the answer is returned
+ *	correctly, and the caller doesn't have to do it.
+ */
+
 extern fr_dict_attr_t const *attr_cast_base; /* xlat_expr.c */
 
 static xlat_arg_parser_t const cast_xlat_args[] = {
@@ -64,6 +92,18 @@ static xlat_action_t xlat_func_cast(TALLOC_CTX *ctx, fr_dcursor_t *out,
 			fr_value_box_init(dst, FR_TYPE_BOOL, NULL, false);
 			dst->vb_bool = (b->vb_length > 0);
 			goto done;
+
+		case FR_TYPE_IPV4_ADDR:
+		case FR_TYPE_IPV6_ADDR:
+			fr_value_box_init(dst, FR_TYPE_BOOL, NULL, false);
+			dst->vb_bool = fr_ipaddr_is_inaddr_any(&b->vb_ip);
+			break;
+
+		case FR_TYPE_IPV4_PREFIX:
+		case FR_TYPE_IPV6_PREFIX:
+			fr_value_box_init(dst, FR_TYPE_BOOL, NULL, false);
+			dst->vb_bool = (b->vb_ip.prefix == 0) && fr_ipaddr_is_inaddr_any(&b->vb_ip);
+			break;
 
 		default:
 			break;
@@ -230,9 +270,7 @@ static xlat_action_t xlat_func_unary_sub(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	fr_dcursor_append(out, dst);
 	return XLAT_ACTION_DONE;
 }
-/*
- *	@todo - have a field in the xlat_t
- */
+
 #undef XLAT_REGISTER_BINARY_OP
 #define XLAT_REGISTER_BINARY_OP(_name) \
 do { \
@@ -286,7 +324,7 @@ int xlat_register_expressions(void)
 	if (!(xlat = xlat_register(NULL, "unary_minus", xlat_func_unary_sub, XLAT_FLAG_PURE))) return -1;
 	xlat_func_args(xlat, unary_sub_xlat_args);
 	xlat_internal(xlat);
-	
+
 	if (!(xlat = xlat_register(NULL, "unary_not", xlat_func_unary_not, XLAT_FLAG_PURE))) return -1;
 	xlat_func_args(xlat, unary_not_xlat_args);
 	xlat_internal(xlat);
@@ -326,14 +364,29 @@ static const fr_sbuff_term_elem_t binary_ops[T_TOKEN_LAST] = {
 
 /*
  *	Allow for BEDMAS ordering.  Gross ordering is first number,
- *	fine ordering is second number.  Unused operators 
+ *	fine ordering is second number.  Unused operators are assigned as zero.
  */
 #define P(_x, _y) (((_x) << 4) | (_y))
 
 static const int precedence[T_TOKEN_LAST] = {
 	[T_INVALID]	= 0,
 
-	// += -= *= /= %= <<= >>= &= ^= |=
+	/*
+	 *	Assignment operators go here:
+	 *
+	 *	+= -= *= /= %= <<= >>= &= ^= |=
+	 *
+	 *	We want the output of the assignment operators to be the result of the assignment.  This means
+	 *	that the assignments can really only be done for simple attributes, and not tmpls with filters
+	 *	which select multiple attributes.
+	 *
+	 *	Which (for now) means that we likely want to disallow assignments in expressions.  That's
+	 *	fine, as this isn't C, and we're not sure that it makes sense to do something like:
+	 *
+	 *		if ((&foo += 5) > 60) ...
+	 *
+	 *	Or maybe it does.  Who knows?
+	 */
 
 	[T_LOR]		= P(2,0),
 	[T_LAND]	= P(2,1),
@@ -434,7 +487,7 @@ static ssize_t tokenize_field(TALLOC_CTX *input_ctx, xlat_exp_t **head, xlat_fla
 		unary->flags = func->flags;
 		free_ctx = ctx = unary;
 	}
-	
+
 	/*
 	 *	Allow for casts, if the caller hasn't already specified that.
 	 *
@@ -624,7 +677,6 @@ check_more:
 			 *	@todo - also update the escaping rules, depending on kind of string we have.
 			 */
 			type = FR_TYPE_STRING;
-
 		} else {			
 			type = FR_TYPE_INT64;
 		}
@@ -863,7 +915,7 @@ redo:
 		return fr_sbuff_set(input, &in);
 	}
 	fr_sbuff_skip_whitespace(&in);
-			
+
 	/*
 	 *	Remember where we were after parsing the LHS.
 	 */
@@ -877,7 +929,12 @@ redo:
 		talloc_free(lhs);
 		fr_strerror_printf("Expected operator at '%.4s'", fr_sbuff_current(&in));
 		FR_SBUFF_ERROR_RETURN(&in);
-	}	
+	}
+
+	/*
+	 *	@todo - handle regexes as a special case.  The LHS ideally should be a simple xlat (i.e. not a
+	 *	comparison).  The RHS MUST be a solidus-quoted string.
+	 */
 
 	if (!binary_ops[op].str) {
 		fr_strerror_printf("Invalid operator '%s'", fr_tokens[op]);
@@ -1006,7 +1063,7 @@ ssize_t xlat_tokenize_expression(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_
 								 &bracket_terms));
 
 	if (!flags) flags = &my_flags;
-	
+
 	slen = tokenize_expression(ctx, head, flags, in, terminal_rules, t_rules, T_INVALID, FR_TYPE_VOID,
 				   bracket_rules, NULL);
 	talloc_free(bracket_rules);
