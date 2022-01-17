@@ -52,7 +52,7 @@ match %(cmp_eq:"foo""bar")
 
 # note '/' is a prefix, not "divide by 24".
 xlat_expr &Framed-IP-Address < (ipv4prefix) 192.168.0.0/24
-match %(cmp_lt:%{Framed-IP-Address} 192.168.0.0/24)
+match %(cmp_lt:%{Framed-IP-Address}%(cast:ipv4prefix 192.168.0.0/24))
 
 #
 #  Logical && and ||

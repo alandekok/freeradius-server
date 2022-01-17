@@ -30,6 +30,8 @@ RCSID("$Id$")
 #include <freeradius-devel/unlang/xlat_priv.h>
 #include <freeradius-devel/util/calc.h>
 
+extern fr_dict_attr_t const *attr_cast_base; /* xlat_expr.c */
+
 static xlat_arg_parser_t const cast_xlat_args[] = {
 	{ .required = true, .type = FR_TYPE_INT32 },
 	{ .required = true, .type = FR_TYPE_VOID },
@@ -43,8 +45,8 @@ static xlat_action_t xlat_func_cast(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	fr_value_box_t	*dst, *a, *b;
 
 	a = fr_dlist_head(in);
-	fr_assert(a->vb_uint32 > FR_TYPE_NULL);
-	fr_assert(a->vb_uint32 < FR_TYPE_MAX);
+	fr_assert(a->vb_uint8 > FR_TYPE_NULL);
+	fr_assert(a->vb_uint8 < FR_TYPE_MAX);
 
 	MEM(dst = fr_value_box_alloc_null(ctx)); /* value_box_cast will over-write it anyways */
 
@@ -55,7 +57,7 @@ static xlat_action_t xlat_func_cast(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	 *	compile time.  Therefore the next expansion is itself an xlat (attribute, exec, etc.)  We
 	 *	therefore have special rules for casting them to bool.
 	 */
-	if (a->vb_uint32 == FR_TYPE_BOOL) {
+	if (a->vb_uint8 == FR_TYPE_BOOL) {
 		switch (b->type) {
 		case FR_TYPE_STRING:
 		case FR_TYPE_OCTETS:
@@ -72,7 +74,7 @@ static xlat_action_t xlat_func_cast(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	 *	Everything else gets cast via the value-box functions, which look for things like "yes" or
 	 *	"no" for booleans.
 	 */
-	if (fr_value_box_cast(ctx, dst, a->vb_uint32, NULL, b) < 0) {
+	if (fr_value_box_cast(ctx, dst, a->vb_uint8, NULL, b) < 0) {
 		talloc_free(dst);
 		return XLAT_ACTION_FAIL;
 	}
@@ -468,9 +470,8 @@ static ssize_t tokenize_field(TALLOC_CTX *input_ctx, xlat_exp_t **head, xlat_fla
 
 		fr_sbuff_advance(&in, 1);
 
-#if 0
 		/*
-		 *	Create a "cast" node.  The LHS is a UINT32 value-box of the cast type.  The RHS is
+		 *	Create a "cast" node.  The LHS is a UINT8 value-box of the cast type.  The RHS is
 		 *	whatever "node" comes next.
 		 */
 		MEM(cast = xlat_exp_alloc(ctx, XLAT_FUNC, "cast", 4));
@@ -479,22 +480,25 @@ static ssize_t tokenize_field(TALLOC_CTX *input_ctx, xlat_exp_t **head, xlat_fla
 		cast->flags = cast->call.func->flags;
 
 		/*
-		 *	Create a LHS child UINT32
+		 *	Create a LHS child UINT8
+		 *
+		 *	@todo - set a da and enumv which has the correct name, so that we can just use that
+		 *	for printing.
 		 */
 		MEM(node = xlat_exp_alloc_null(cast));
+		xlat_exp_set_type(node, XLAT_BOX);
 		xlat_exp_set_name_buffer_shallow(node,
 						 talloc_strdup(node,
 							       fr_table_str_by_value(fr_value_box_type_table, type, "<INVALID>")));
 
-		fr_value_box_init(&node->data, FR_TYPE_UINT32, NULL, false);
-		node->data.vb_uint32 = type;
+		fr_value_box_init(&node->data, FR_TYPE_UINT8, attr_cast_base, false);
+		node->data.vb_uint8 = type;
 
 		cast->child = node;
 		ctx = cast;
 		if (!free_ctx) free_ctx = cast;
 
 		node = NULL;
-#endif
 
 		/*
 		 *	We're casting to a type which is different from the input "da".  Which means that we
@@ -716,6 +720,7 @@ done:
 	 *	"node" to the parent of "cast", and free "cast".
 	 */
 	if (cast) {
+		fr_assert(cast->child);
 		cast->child->next = node;
 		xlat_flags_merge(&cast->flags, &node->flags);
 		node = cast;
