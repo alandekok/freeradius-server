@@ -353,6 +353,13 @@ static const int precedence[T_TOKEN_LAST] = {
 	[T_LBRACE]	= P(9,0),
 };
 
+#ifdef UPCAST
+static const fr_type_t upcast[FR_TYPE_MAX + 1] = {
+	[FR_TYPE_IPV4_ADDR] = FR_TYPE_IPV4_PREFIX,
+	[FR_TYPE_IPV6_ADDR] = FR_TYPE_IPV6_PREFIX,
+};
+#endif
+
 #define fr_sbuff_skip_whitespace(_x) \
 	do { \
 		while (isspace((int) *fr_sbuff_current(_x))) fr_sbuff_advance(_x, 1); \
@@ -480,16 +487,17 @@ static ssize_t tokenize_field(TALLOC_CTX *input_ctx, xlat_exp_t **head, xlat_fla
 		cast->flags = cast->call.func->flags;
 
 		/*
-		 *	Create a LHS child UINT8
-		 *
-		 *	@todo - set a da and enumv which has the correct name, so that we can just use that
-		 *	for printing.
+		 *	Create a LHS child UINT8, with "Cast-Base" as
+		 *	the "da".  This allows the printing routines
+		 *	to print the name of the type, and not the
+		 *	number.
 		 */
 		MEM(node = xlat_exp_alloc_null(cast));
 		xlat_exp_set_type(node, XLAT_BOX);
 		xlat_exp_set_name_buffer_shallow(node,
 						 talloc_strdup(node,
-							       fr_table_str_by_value(fr_value_box_type_table, type, "<INVALID>")));
+							       fr_table_str_by_value(fr_value_box_type_table,
+										     type, "<INVALID>")));
 
 		fr_value_box_init(&node->data, FR_TYPE_UINT8, attr_cast_base, false);
 		node->data.vb_uint8 = type;
@@ -597,10 +605,6 @@ check_more:
 	/*
 	 *	Else it's nothing we recognize.  Do some quick checks
 	 *	to see what it might be.
-	 *
-	 *	@todo - we probably also want to "upcast" IP addresses to prefixes, so that we can do things
-	 *	like check (&Framed-IP-Address < 192.168/16), so that the user doesn't always have to specify
-	 *	the data types.
 	 */
 	if (type == FR_TYPE_VOID) {
 		if (da) {
@@ -616,6 +620,21 @@ check_more:
 			type = FR_TYPE_INT64;
 		}
 	}
+
+	/*
+	 *	@todo - we "upcast" IP addresses to prefixes, so that we can do things like check
+	 *
+	 *		&Framed-IP-Address < 192.168/16
+	 *
+	 *	so that the user doesn't always have to specify the data types.
+	 *
+	 *	However, we *don't* upcast it if the user has given us an explicit cast.  And we probably want
+	 *	to remember the original type.  So that for IPs, if there's no '/' in the parsed input, then
+	 *	we swap the data type from the "upcast" prefix type to the input IP address type.
+	 */
+#ifdef UPCAST
+	if (!cast && upcast[type]) type = upcast[type];
+#endif
 
 	fr_assert(fr_type_is_leaf(type));
 
@@ -654,8 +673,6 @@ check_more:
 		if (da) {
 			fr_dict_enum_value_t *enumv;
 
-			fr_assert(da->type == type);
-
 			slen = fr_dict_enum_by_name_substr(&enumv, da, &in);
 			if (slen == 0) {
 				da = NULL;
@@ -675,7 +692,7 @@ check_more:
 			slen = fr_value_box_from_substr(node, &node->data, type, da, &in, p_rules, false);
 			if (slen <= 0) {
 			failed_value:
-				fr_strerror_printf("Failed parsing value '%.5s'", fr_sbuff_current(&in));
+				fr_strerror_printf("Failed parsing value - %s", fr_strerror());
 				talloc_free(free_ctx);
 				FR_SBUFF_ERROR_RETURN_ADJ(&in, slen);
 			}
@@ -690,9 +707,10 @@ check_more:
 
 done:
 	/*
-	 *	@todo - keep a flag to track if we create the cmp_foo / op_foo function.  And if so, check for
-	 *	input flags->pure.  If set, we call xlat_purify() to purify the results.  This capability lets
-	 *	us write tests for parsing which use simple numbers, to verify that the parser is OK.
+	 *	@todo - keep a flag to track if we create the node via a cmp_foo / op_foo function.  And if
+	 *	so, check for input flags->pure.  If set, we call xlat_purify() to purify the results.  This
+	 *	capability lets us write tests for parsing which use simple numbers, to verify that the parser
+	 *	is OK.
 	 *
 	 *	And as a later optimization, lets us optimize the expressions at compile time instead of
 	 *	re-evaluating them at run-time.  Just like the old-style conditions.
@@ -742,7 +760,7 @@ done:
 }
 
 /*
- *	Lexigraphically sorted!
+ *	A mapping of operators to tokens.
  */
 static fr_table_num_ordered_t const expr_assignment_op_table[] = {
 	{ L("!="),	T_OP_NE			},
@@ -773,9 +791,7 @@ static size_t const expr_assignment_op_table_len = NUM_ELEMENTS(expr_assignment_
 
 /** Tokenize a mathematical operation.
  *
- *  @todo - take the tokenization process from rlm_expr, and cond_tokenize.c
- *
- *  @todo - convert rlm_expr to the new value.
+ *  @todo - convert rlm_expr to the new API.
  *
  *	(EXPR)
  *	!EXPR

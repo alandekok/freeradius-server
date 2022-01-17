@@ -54,6 +54,20 @@ match %(cmp_eq:"foo""bar")
 xlat_expr &Framed-IP-Address < (ipv4prefix) 192.168.0.0/24
 match %(cmp_lt:%{Framed-IP-Address}%(cast:ipv4prefix 192.168.0.0/24))
 
+xlat_expr &Framed-IP-Address < (ipv4prefix) 192.168.0.0
+match %(cmp_lt:%{Framed-IP-Address}%(cast:ipv4prefix 192.168.0.0/32))
+
+#
+#  For IP addresses, the other side is automatically upcast to a prefix
+#
+
+#xlat_expr &Framed-IP-Address < 192.168.0.0/24
+#match %(cmp_lt:%{Framed-IP-Address}%(cast:ipv4prefix 192.168.0.0/32))
+
+#  same as above, but swap the order
+xlat_expr (ipv4prefix) 192.168.0.0/24 > &Framed-IP-Address
+match %(cmp_gt:%(cast:ipv4prefix 192.168.0.0/24)%{Framed-IP-Address})
+
 #
 #  Logical && and ||
 #
@@ -81,4 +95,4 @@ match %(op_add:%(op_add:4 3) 6)
 #
 
 count
-match 43
+match 47
