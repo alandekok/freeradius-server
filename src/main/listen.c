@@ -1161,6 +1161,7 @@ int common_socket_parse(CONF_SECTION *cs, rad_listen_t *this)
 	CONF_SECTION	*client_cs, *parentcs;
 	CONF_SECTION	*subcs;
 	CONF_PAIR	*cp;
+	bool		sradius = false;
 
 	this->cs = cs;
 
@@ -1228,6 +1229,9 @@ int common_socket_parse(CONF_SECTION *cs, rad_listen_t *this)
 		}
 #endif	/* WITH_PROXY */
 
+	rcode = cf_item_parse(cs, "sradius", FR_ITEM_POINTER(PW_TYPE_BOOLEAN, &sradius), NULL);
+	if (rcode < 0) return -1;
+
 #ifdef WITH_TLS
 		tls = cf_section_sub_find(cs, "tls");
 
@@ -1268,6 +1272,10 @@ int common_socket_parse(CONF_SECTION *cs, rad_listen_t *this)
 
 			rcode = cf_item_parse(cs, "check_client_connections", FR_ITEM_POINTER(PW_TYPE_BOOLEAN, &this->check_client_connections), "no");
 			if (rcode < 0) return -1;
+
+		} else if (sradius) {
+			cf_log_err_cs(cs, "SRADIUS requires TLS transport");
+			return -1;
 		}
 #else  /* WITH_TLS */
 		/*
@@ -1276,6 +1284,12 @@ int common_socket_parse(CONF_SECTION *cs, rad_listen_t *this)
 		if (cf_section_sub_find(cs, "tls")) {
 			cf_log_err_cs(cs,
 				   "TLS transport is not available in this executable");
+			return -1;
+		}
+
+		if (sradius) {
+			cf_log_err_cs(cs,
+				   "SRADIUS is not available in this executable");
 			return -1;
 		}
 #endif	/* WITH_TLS */

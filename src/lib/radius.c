@@ -936,6 +936,13 @@ static ssize_t vp2data_any(RADIUS_PACKET const *packet,
 	 */
 	if (len > (ssize_t) room) len = room;
 
+#ifdef WITH_TLS
+	/*
+	 *	SRADIUS does not encrypt any attributes.
+	 */
+	if (packet->sradius) goto tag;
+#endif
+
 	/*
 	 *	Encrypt the various password styles
 	 *
@@ -999,6 +1006,7 @@ static ssize_t vp2data_any(RADIUS_PACKET const *packet,
 
 
 	default:
+	tag:
 		if (vp->da->flags.has_tag && TAG_VALID(vp->tag)) {
 			if (vp->da->type == PW_TYPE_STRING) {
 				if (len > ((ssize_t) (room - 1))) len = room - 1;
@@ -1591,6 +1599,16 @@ int rad_vp2rfc(RADIUS_PACKET const *packet,
 	 *	Message-Authenticator is hard-coded.
 	 */
 	if (vp->da->attr == PW_MESSAGE_AUTHENTICATOR) {
+#ifdef WITH_TLS
+		/*
+		 *	SRADIUS does not encode or verify Message-Authenticator.
+		 */
+		if (packet->sradius) {
+			*pvp = (*pvp)->next;
+			return 0;
+		}
+#endif
+
 		if (room < 18) return -1;
 
 		ptr[0] = PW_MESSAGE_AUTHENTICATOR;
@@ -1926,6 +1944,16 @@ int rad_encode(RADIUS_PACKET *packet, RADIUS_PACKET const *original,
 		 *	length and initial value.
 		 */
 		if (!reply->da->vendor && (reply->da->attr == PW_MESSAGE_AUTHENTICATOR)) {
+#ifdef WITH_TLS
+			/*
+			 *	SRADIUS does not encode or verify Message-Authenticator.
+			 */
+			if (packet->sradius) {
+				reply = reply->next;
+				continue;
+			}
+#endif
+
 			if (room < 18) break;
 
 			/*
@@ -2014,6 +2042,17 @@ int rad_sign(RADIUS_PACKET *packet, RADIUS_PACKET const *original,
 		fr_strerror_printf("ERROR: You must call rad_encode() before rad_sign()");
 		return -1;
 	}
+
+#ifdef WITH_TLS
+	/*
+	 *	SRADIUS uses the authenticator field for matching
+	 *	requests to responses, and does not otherwise verify
+	 *	it.
+	 */
+	if (packet->sradius) {
+		return 0;
+	}
+#endif
 
 	/*
 	 *	Set up the authentication vector with zero, or with
@@ -2640,6 +2679,13 @@ bool rad_packet_ok(RADIUS_PACKET *packet, int flags, decode_fail_t *reason)
 			break;
 
 		case PW_MESSAGE_AUTHENTICATOR:
+#ifdef WITH_TLS
+			/*
+			 *	SRADIUS does not encode or verify Message-Authenticator.
+			 */
+			if (packet->sradius) break;
+#endif
+
 			if (attr[1] != 2 + AUTH_VECTOR_LEN) {
 				FR_DEBUG_STRERROR_PRINTF("Malformed RADIUS packet from host %s: Message-Authenticator has invalid length %d",
 					   inet_ntop(packet->src_ipaddr.af,
@@ -2705,7 +2751,14 @@ bool rad_packet_ok(RADIUS_PACKET *packet, int flags, decode_fail_t *reason)
 	 *	Similarly, Status-Server packets MUST contain
 	 *	Message-Authenticator attributes.
 	 */
-	if (require_ma && !seen_ma) {
+	if (require_ma &&
+#ifdef WITH_TLS
+	    /*
+	     *	SRADIUS does not encode or verify Message-Authenticator.
+	     */
+	    !packet->sradius &&
+#endif
+	    !seen_ma) {
 		FR_DEBUG_STRERROR_PRINTF("Insecure packet from host %s:  Packet does not contain required Message-Authenticator attribute",
 			   inet_ntop(packet->src_ipaddr.af,
 				     &packet->src_ipaddr.ipaddr,
@@ -2851,6 +2904,13 @@ int rad_verify(RADIUS_PACKET *packet, RADIUS_PACKET *original, char const *secre
 			 *	attribute is invalid.
 			 */
 		case PW_MESSAGE_AUTHENTICATOR:
+#ifdef WITH_TLS
+			/*
+			 *	Ignore Message-Authenticator for SRADIUS packets.
+			 */
+			if (packet->sradius) break;
+#endif
+
 			memcpy(msg_auth_vector, &ptr[2], sizeof(msg_auth_vector));
 			memset(&ptr[2], 0, AUTH_VECTOR_LEN);
 
@@ -2927,6 +2987,15 @@ int rad_verify(RADIUS_PACKET *packet, RADIUS_PACKET *original, char const *secre
 				   packet->src_port);
 		return -1;
 	}
+
+#ifdef WITH_TLS
+	/*
+	 *	SRADIUS uses the authenticator field for matching
+	 *	requests to responses, and does not otherwise verify
+	 *	it.
+	 */
+	if (packet->sradius) return 0;
+#endif
 
 	/*
 	 *	Calculate and/or verify Request or Response Authenticator.
@@ -3858,7 +3927,16 @@ ssize_t data2vp(TALLOC_CTX *ctx,
 	/*
 	 *	Decrypt the attribute.
 	 */
-	if (secret && packet && (da->flags.encrypt != FLAG_ENCRYPT_NONE)) {
+	if (secret && packet &&
+
+#ifdef WITH_TLS
+	    /*
+	     *	SRADIUS does not encrypt any attributes.
+	     */
+	    !packet->sradius &&
+#endif
+
+	    (da->flags.encrypt != FLAG_ENCRYPT_NONE)) {
 		VP_TRACE("data2vp: decrypting type %u\n", da->flags.encrypt);
 		/*
 		 *	Encrypted attributes can only exist for the

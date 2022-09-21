@@ -345,6 +345,8 @@ static int tls_socket_recv(rad_listen_t *listener)
 		sock->packet->dst_ipaddr = sock->my_ipaddr;
 		sock->packet->dst_port = sock->my_port;
 
+		sock->packet->sradius = listener->sradius;
+
 		if (sock->request) sock->request->packet = talloc_steal(sock->request, sock->packet);
 	}
 

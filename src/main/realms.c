@@ -511,6 +511,10 @@ static CONF_PARSER home_server_config[] = {
 	{ "username", FR_CONF_OFFSET(PW_TYPE_STRING | PW_TYPE_NOT_EMPTY, home_server_t, ping_user_name), NULL },
 	{ "password", FR_CONF_OFFSET(PW_TYPE_STRING | PW_TYPE_NOT_EMPTY, home_server_t, ping_user_password), NULL },
 
+#ifdef WITH_TLS
+	{ "sradius", FR_CONF_OFFSET(PW_TYPE_BOOLEAN, home_server_t, sradius), NULL },
+#endif
+
 #ifdef WITH_STATS
 	{ "historic_average_window", FR_CONF_OFFSET(PW_TYPE_INTEGER, home_server_t, ema.window), NULL },
 #endif
@@ -946,9 +950,19 @@ home_server_t *home_server_afrom_cs(TALLOC_CTX *ctx, realm_config_t *rc, CONF_SE
 	 *	Check the TLS configuration.
 	 */
 	tls = cf_section_sub_find(cs, "tls");
-#ifndef WITH_TLS
+#ifdef WITH_TLS
+	if (!tls && home->sradius) {
+		cf_log_err_cs(cs, "SRADIUS requires TLS transport");
+		return -1;
+	}
+#else
 	if (tls) {
 		cf_log_err_cs(cs, "TLS transport is not available in this executable");
+		goto error;
+	}
+
+	if (home->sradius) {
+		cf_log_err_cs(cs, "SRADIUS is not available in this executable");
 		goto error;
 	}
 #endif
