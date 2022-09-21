@@ -11,6 +11,10 @@ RCSID("$Id$")
 
 #include <freeradius-devel/libradius.h>
 
+#ifdef WITH_SRADIUS_ONLY
+#error This should not be compiled.
+#endif
+
 /*
  *  FORCE MD5 TO USE OUR MD5 HEADER FILE!
  *  If we don't do this, it might pick up the systems broken MD5.

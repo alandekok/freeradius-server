@@ -9,6 +9,10 @@
 
 RCSID("$Id$")
 
+#ifdef WITH_SRADIUS_ONLY
+#error This should not be compiled.
+#endif
+
 /*
  *  FORCE MD4 TO USE OUR MD4 HEADER FILE!
  *  If we don't do this, it might pick up the systems broken MD4.

@@ -3452,9 +3452,15 @@ static int command_tcp_recv(rad_listen_t *this)
 			goto do_close;
 		}
 
+#ifndef WITH_SRADIUS_ONLY
 		fr_hmac_md5(expected, (void const *) sock->client->secret,
 			    strlen(sock->client->secret),
 			    (uint8_t *) co->buffer, 16);
+#else
+		fr_hmac_sha1(expected, (void const *) sock->client->secret,
+			     strlen(sock->client->secret),
+			     (uint8_t *) co->buffer, 16);
+#endif
 
 		if (rad_digest_cmp(expected,
 				   (uint8_t *) co->buffer + 16, 16 != 0)) {

@@ -534,6 +534,8 @@ RADIUS_PACKET	*rad_alloc_reply(TALLOC_CTX *ctx, RADIUS_PACKET *);
 RADIUS_PACKET *rad_copy_packet(TALLOC_CTX *ctx, RADIUS_PACKET const *in);
 
 void		rad_free(RADIUS_PACKET **);
+
+#ifndef WITH_SRADIUS_ONLY
 int		rad_pwencode(char *encpw, size_t *len, char const *secret,
 			     uint8_t const *vector);
 int		rad_pwdecode(char *encpw, size_t len, char const *secret,
@@ -546,6 +548,7 @@ ssize_t		rad_tunnel_pwdecode(uint8_t *encpw, size_t *len,
 				    char const *secret, uint8_t const *vector);
 int		rad_chap_encode(RADIUS_PACKET *packet, uint8_t *output,
 				int id, VALUE_PAIR *password);
+#endif
 
 int		rad_attr_ok(RADIUS_PACKET const *packet, RADIUS_PACKET const *original,
 			    DICT_ATTR *da, uint8_t const *data, size_t length);

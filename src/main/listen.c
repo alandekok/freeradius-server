@@ -1232,6 +1232,13 @@ int common_socket_parse(CONF_SECTION *cs, rad_listen_t *this)
 	rcode = cf_item_parse(cs, "sradius", FR_ITEM_POINTER(PW_TYPE_BOOLEAN, &sradius), NULL);
 	if (rcode < 0) return -1;
 
+#ifdef WITH_SRADIUS_ONLY
+	if (!sradius) {
+		cf_log_err_cs(cs, "SRADIUS is required.");
+		return -1;
+	}
+#endif
+
 #ifdef WITH_TLS
 		tls = cf_section_sub_find(cs, "tls");
 

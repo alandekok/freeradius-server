@@ -210,7 +210,7 @@ static void openssl3_free(void)
 #endif
 
 
-
+#ifndef WITH_SRADIUS_ONLY
 static int mschapv1_encode(RADIUS_PACKET *packet, VALUE_PAIR **request,
 			   char const *password)
 {
@@ -253,7 +253,7 @@ static int mschapv1_encode(RADIUS_PACKET *packet, VALUE_PAIR **request,
 	smbdes_mschap(nthash, challenge->vp_octets, p + 26);
 	return 1;
 }
-
+#endif	/* WITH_SRADIUS_ONLY */
 
 static int getport(char const *name)
 {
@@ -960,6 +960,7 @@ static int send_one_packet(rc_request_t *request)
 			if ((vp = fr_pair_find_by_num(request->packet->vps, PW_USER_PASSWORD, 0, TAG_ANY)) != NULL) {
 				fr_pair_value_strcpy(vp, request->password->vp_strvalue);
 
+#ifndef WITH_SRADIUS_ONLY
 			} else if ((vp = fr_pair_find_by_num(request->packet->vps, PW_CHAP_PASSWORD, 0, TAG_ANY)) != NULL) {
 				uint8_t buffer[17];
 
@@ -968,6 +969,7 @@ static int send_one_packet(rc_request_t *request)
 
 			} else if (fr_pair_find_by_num(request->packet->vps, PW_MS_CHAP_PASSWORD, 0, TAG_ANY) != NULL) {
 				mschapv1_encode(request->packet, &request->packet->vps, request->password->vp_strvalue);
+#endif
 
 			} else {
 				DEBUG("WARNING: No password in the request");

@@ -99,6 +99,7 @@ static const FR_NAME_NUMBER header_names[] = {
 #endif
 	{ "{sha}",		PW_SHA_PASSWORD },
 	{ "{ssha}",		PW_SSHA_PASSWORD },
+#ifndef WITH_SRADIUS_ONLY
 	{ "{md4}",		PW_NT_PASSWORD },
 	{ "{nt}",		PW_NT_PASSWORD },
 	{ "{nthash}",		PW_NT_PASSWORD },
@@ -106,6 +107,7 @@ static const FR_NAME_NUMBER header_names[] = {
 	{ "{ns-mta-md5}",	PW_NS_MTA_MD5_PASSWORD },
 	{ "{x- orcllmv}",	PW_LM_PASSWORD },
 	{ "{X- orclntv}",	PW_NT_PASSWORD },
+#endif
 	{ NULL, 0 }
 };
 
@@ -589,6 +591,7 @@ static rlm_rcode_t CC_HINT(nonnull) pap_auth_crypt(UNUSED rlm_pap_t *inst, REQUE
 	return RLM_MODULE_OK;
 }
 
+#ifndef WITH_SRADIUS_ONLY
 static rlm_rcode_t CC_HINT(nonnull) pap_auth_md5(rlm_pap_t *inst, REQUEST *request, VALUE_PAIR *vp)
 {
 	FR_MD5_CTX md5_context;
@@ -649,6 +652,7 @@ static rlm_rcode_t CC_HINT(nonnull) pap_auth_smd5(rlm_pap_t *inst, REQUEST *requ
 
 	return RLM_MODULE_OK;
 }
+#endif	/* WITH_SRADIUS_ONLY */
 
 static rlm_rcode_t CC_HINT(nonnull) pap_auth_sha(rlm_pap_t *inst, REQUEST *request, VALUE_PAIR *vp)
 {
@@ -1138,6 +1142,7 @@ static rlm_rcode_t CC_HINT(nonnull) pap_auth_pbkdf2(UNUSED rlm_pap_t *inst, REQU
 }
 #endif
 
+#ifndef WITH_SRADIUS_ONLY
 static rlm_rcode_t CC_HINT(nonnull) pap_auth_nt(rlm_pap_t *inst, REQUEST *request, VALUE_PAIR *vp)
 {
 	ssize_t len;
@@ -1264,6 +1269,7 @@ static rlm_rcode_t CC_HINT(nonnull) pap_auth_ns_mta_md5(UNUSED rlm_pap_t *inst, 
 
 	return RLM_MODULE_OK;
 }
+#endif	/* WITH_SRADIUS_ONLY */
 
 /*
  *	Authenticate the user via one of any well-known password.
@@ -1314,6 +1320,7 @@ static rlm_rcode_t CC_HINT(nonnull) mod_authenticate(void *instance, REQUEST *re
 			auth_func = &pap_auth_crypt;
 			break;
 
+#ifndef WITH_SRADIUS_ONLY
 		case PW_MD5_PASSWORD:
 			auth_func = &pap_auth_md5;
 			break;
@@ -1321,6 +1328,7 @@ static rlm_rcode_t CC_HINT(nonnull) mod_authenticate(void *instance, REQUEST *re
 		case PW_SMD5_PASSWORD:
 			auth_func = &pap_auth_smd5;
 			break;
+#endif
 
 #ifdef HAVE_OPENSSL_EVP_H
 		case PW_SHA2_PASSWORD:
@@ -1347,6 +1355,7 @@ static rlm_rcode_t CC_HINT(nonnull) mod_authenticate(void *instance, REQUEST *re
 			auth_func = &pap_auth_ssha;
 			break;
 
+#ifndef WITH_SRADIUS_ONLY
 		case PW_NT_PASSWORD:
 			auth_func = &pap_auth_nt;
 			break;
@@ -1358,6 +1367,7 @@ static rlm_rcode_t CC_HINT(nonnull) mod_authenticate(void *instance, REQUEST *re
 		case PW_NS_MTA_MD5_PASSWORD:
 			auth_func = &pap_auth_ns_mta_md5;
 			break;
+#endif
 
 		default:
 			break;

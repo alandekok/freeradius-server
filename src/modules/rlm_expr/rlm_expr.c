@@ -927,6 +927,7 @@ static ssize_t toupper_xlat(UNUSED void *instance, UNUSED REQUEST *request, char
 	return strlen(out);
 }
 
+#ifndef WITH_SRADIUS_ONLY
 /** Calculate the MD5 hash of a string or attribute.
  *
  * Example: "%{md5:foo}" == "acbd18db4cc2f85cedef654fccc4a4d8"
@@ -1012,6 +1013,7 @@ static ssize_t md4_xlat(UNUSED void *instance, REQUEST *request,
 
 	return strlen(out);
 }
+#endif	/* WITH_SRADIUS_ONLY */
 
 /** Calculate the SHA1 hash of a string or attribute.
  *
@@ -1113,6 +1115,7 @@ EVP_MD_XLAT(sha256)
 EVP_MD_XLAT(sha512)
 #endif
 
+#ifndef WITH_SRADIUS_ONLY
 /** Generate the HMAC-MD5 of a string or attribute
  *
  * Example: "%{hmacmd5:foo bar}" == "Zm9v"
@@ -1158,6 +1161,7 @@ static ssize_t hmac_md5_xlat(UNUSED void *instance, REQUEST *request,
 
 	return fr_bin2hex(out, digest, sizeof(digest));
 }
+#endif
 
 /** Generate the HMAC-SHA1 of a string or attribute
  *
@@ -1874,14 +1878,18 @@ static int mod_bootstrap(CONF_SECTION *conf, void *instance)
 	xlat_register("unescape", unescape_xlat, NULL, inst);
 	xlat_register("tolower", tolower_xlat, NULL, inst);
 	xlat_register("toupper", toupper_xlat, NULL, inst);
+#ifndef WITH_SRADIUS_ONLY
 	xlat_register("md4", md4_xlat, NULL, inst);
 	xlat_register("md5", md5_xlat, NULL, inst);
+#endif
 	xlat_register("sha1", sha1_xlat, NULL, inst);
 #ifdef HAVE_OPENSSL_EVP_H
 	xlat_register("sha256", sha256_xlat, NULL, inst);
 	xlat_register("sha512", sha512_xlat, NULL, inst);
 #endif
+#ifndef WITH_SRADIUS_ONLY
 	xlat_register("hmacmd5", hmac_md5_xlat, NULL, inst);
+#endif
 	xlat_register("hmacsha1", hmac_sha1_xlat, NULL, inst);
 	xlat_register("crypt", crypt_xlat, NULL, inst);
 	xlat_register("pairs", pairs_xlat, NULL, inst);

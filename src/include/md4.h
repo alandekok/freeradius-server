@@ -12,6 +12,8 @@
 
 RCSIDH(md4_h, "$Id$")
 
+#ifndef WITH_SRADIUS_ONLY
+
 #ifdef HAVE_INTTYPES_H
 #  include <inttypes.h>
 #endif
@@ -133,5 +135,6 @@ void fr_md4_calc(uint8_t out[MD4_DIGEST_LENGTH], uint8_t const *in, size_t inlen
 
 #ifdef __cplusplus
 }
+#endif
 #endif
 #endif /* _FR_MD4_H */

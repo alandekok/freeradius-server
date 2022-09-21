@@ -9,6 +9,10 @@
 #
 KEYWORD_FILES := $(filter-out %.conf %.md %.attrs %.mk %~ %.rej,$(subst $(DIR)/,,$(wildcard $(DIR)/*)))
 
+ifneq "$(SRADIUS_ONLY)" ""
+KEYWORD_FILES := $(filter-out %md4 %md5,$(KEYWORD_FILES))
+endif
+
 ifeq "$(OPENSSL_LIBS)" ""
 KEYWORD_FILES := $(filter-out pap-ssha2,$(KEYWORD_FILES))
 endif

@@ -946,6 +946,13 @@ home_server_t *home_server_afrom_cs(TALLOC_CTX *ctx, realm_config_t *rc, CONF_SE
 		goto error;
 	}
 
+#ifdef WITH_SRADIUS_ONLY
+	if (!home->sradius) {
+		cf_log_err_cs(cs, "SRADIUS is required.");
+		goto error;
+	}
+#endif
+
 	/*
 	 *	Check the TLS configuration.
 	 */
@@ -953,7 +960,7 @@ home_server_t *home_server_afrom_cs(TALLOC_CTX *ctx, realm_config_t *rc, CONF_SE
 #ifdef WITH_TLS
 	if (!tls && home->sradius) {
 		cf_log_err_cs(cs, "SRADIUS requires TLS transport");
-		return -1;
+		goto error;
 	}
 #else
 	if (tls) {

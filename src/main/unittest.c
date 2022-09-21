@@ -234,6 +234,7 @@ static REQUEST *request_setup(FILE *fp)
 			request->packet->src_ipaddr.prefix = 128;
 			break;
 
+#ifndef WITH_SRADIUS_ONLY
 		case PW_CHAP_PASSWORD: {
 			int i, already_hex = 0;
 
@@ -321,6 +322,7 @@ static REQUEST *request_setup(FILE *fp)
 		}
 
 		break;
+#endif
 		}
 	} /* loop over the VP's we read in */
 

@@ -19,6 +19,21 @@ endif
 
 SUBMAKEFILES += $(wildcard ${top_srcdir}/src/modules/proto_*/all.mk)
 
+#
+#  Remove CHAP and MS-CHAP, and Digest authentication.
+#
+#  For now, also remove EAP, until we get around to fixing it.
+#
+#  Also remove rlm_ippool, as it uses an MD5 hash to map keys to values.
+#  That should be changed to SHA256 or something similar.
+#
+ifneq "$(SRADIUS_ONLY)" ""
+SUBMAKEFILES := $(filter-out %chap/all.mk, $(SUBMAKEFILES))
+SUBMAKEFILES := $(filter-out %rlm_digest/all.mk, $(SUBMAKEFILES))
+SUBMAKEFILES := $(filter-out %/rlm_eap/all.mk, $(SUBMAKEFILES))
+SUBMAKEFILES := $(filter-out %/rlm_ippool/all.mk, $(SUBMAKEFILES))
+endif
+
 ifeq "$(MAKECMDGOALS)" "reconfig"
 src/modules/%/configure: src/modules/%/configure.ac $(wildcard $(top_builddir)/m4/*.m4)
 	@echo AUTOCONF $(dir $@)

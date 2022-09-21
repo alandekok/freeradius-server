@@ -11,14 +11,11 @@ SOURCES		:= cbuff.c \
 		   dict.c \
 		   filters.c \
 		   hash.c \
-		   hmacmd5.c \
 		   hmacsha1.c \
 		   isaac.c \
 		   log.c \
 		   misc.c \
 		   missing.c \
-		   md4.c \
-		   md5.c \
 		   net.c \
 		   pair.c \
 		   pcap.c \
@@ -43,6 +40,12 @@ SOURCES		:= cbuff.c \
 		   base64.c \
 		   version.c \
 		   atomic_queue.c
+
+ifeq "$(SRADIUS_ONLY)" ""
+SOURCES		+= hmacmd5.c \
+		   md4.c \
+		   md5.c
+endif
 
 SRC_CFLAGS	:= -D_LIBRADIUS -I$(top_builddir)/src
 

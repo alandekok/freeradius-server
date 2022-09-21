@@ -89,8 +89,10 @@ typedef struct radius_packet_t {
 
 static fr_randctx fr_rand_pool;	/* across multiple calls */
 static int fr_rand_initialized = 0;
+#ifndef WITH_SRADIUS_ONLY
 static unsigned int salt_offset = 0;
 static uint8_t nullvector[AUTH_VECTOR_LEN] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }; /* for CoA decode */
+#endif
 
 char const *fr_packet_codes[FR_MAX_PACKET_CODE] = {
   "",					//!< 0
@@ -507,6 +509,7 @@ static ssize_t rad_recvfrom(int sockfd, RADIUS_PACKET *packet, int flags,
 }
 
 
+#ifndef WITH_SRADIUS_ONLY
 #define AUTH_PASS_LEN (AUTH_VECTOR_LEN)
 /** Build an encrypted secret value to return in a reply packet
  *
@@ -692,6 +695,7 @@ static void make_tunnel_passwd(uint8_t *output, ssize_t *outlen,
 	fr_md5_destroy(&old);
 	fr_md5_destroy(&context);
 }
+#endif	/* WITH_SRADIUS_ONLY */
 
 static int do_next_tlv(VALUE_PAIR const *vp, VALUE_PAIR const *next, int nest)
 {
@@ -950,6 +954,7 @@ static ssize_t vp2data_any(RADIUS_PACKET const *packet,
 	 *	128 bytes long.
 	 */
 	switch (vp->da->flags.encrypt) {
+#ifndef WITH_SRADIUS_ONLY
 	case FLAG_ENCRYPT_USER_PASSWORD:
 		make_passwd(ptr, &len, data, len,
 			    secret, packet->vector);
@@ -1003,7 +1008,7 @@ static ssize_t vp2data_any(RADIUS_PACKET const *packet,
 		make_secret(ptr, packet->vector, secret, data, len);
 		len = AUTH_VECTOR_LEN;
 		break;
-
+#endif	/* WITH_SRADIUS_ONLY */
 
 	default:
 	tag:
@@ -2020,12 +2025,17 @@ int rad_encode(RADIUS_PACKET *packet, RADIUS_PACKET const *original,
 	return 0;
 }
 
+#ifdef WITH_SRADIUS_ONLY
+#define SRADIUS_UNUSED UNUSED
+#else
+#define SRADIUS_UNUSED
+#endif
 
 /** Sign a previously encoded packet
  *
  */
 int rad_sign(RADIUS_PACKET *packet, RADIUS_PACKET const *original,
-	     char const *secret)
+	     SRADIUS_UNUSED char const *secret)
 {
 	radius_packet_t	*hdr = (radius_packet_t *)packet->data;
 
@@ -2090,6 +2100,7 @@ int rad_sign(RADIUS_PACKET *packet, RADIUS_PACKET const *original,
 	if ((fr_debug_lvl > 3) && fr_log_fp) rad_print_hex(packet);
 #endif
 
+#ifndef WITH_SRADIUS_ONLY
 	/*
 	 *	If there's a Message-Authenticator, update it
 	 *	now.
@@ -2136,12 +2147,14 @@ int rad_sign(RADIUS_PACKET *packet, RADIUS_PACKET const *original,
 		memcpy(packet->data + packet->offset + 2,
 		       calc_auth_vector, AUTH_VECTOR_LEN);
 	}
+#endif	/* WITH_SRADIUS_ONLY */
 
 	/*
 	 *	Copy the request authenticator over to the packet.
 	 */
 	memcpy(hdr->vector, packet->vector, AUTH_VECTOR_LEN);
 
+#ifndef WITH_SRADIUS_ONLY
 	/*
 	 *	Switch over the packet code, deciding how to
 	 *	sign the packet.
@@ -2176,6 +2189,7 @@ int rad_sign(RADIUS_PACKET *packet, RADIUS_PACKET const *original,
 			break;
 		}
 	}/* switch over packet codes */
+#endif	 /* WITH_SRADIUS_ONLY */
 
 	return 0;
 }
@@ -2268,7 +2282,7 @@ int rad_digest_cmp(uint8_t const *a, uint8_t const *b, size_t length)
 	return result;		/* 0 is OK, !0 is !OK, just like memcmp */
 }
 
-
+#ifndef WITH_SRADIUS_ONLY
 /** Validates the requesting client NAS
  *
  * Calculates the request Authenticator based on the clients private key.
@@ -2346,6 +2360,7 @@ static int calc_replydigest(RADIUS_PACKET *packet, RADIUS_PACKET *original,
 	if (rad_digest_cmp(packet->vector, calc_digest, AUTH_VECTOR_LEN) != 0) return 2;
 	return 0;
 }
+#endif	/* WITH_SRADIUS_ONLY */
 
 /** Check if a set of RADIUS formatted TLVs are OK
  *
@@ -2678,6 +2693,7 @@ bool rad_packet_ok(RADIUS_PACKET *packet, int flags, decode_fail_t *reason)
 			non_eap = true;
 			break;
 
+#ifndef WITH_SRADIUS_ONLY
 		case PW_MESSAGE_AUTHENTICATOR:
 #ifdef WITH_TLS
 			/*
@@ -2697,6 +2713,7 @@ bool rad_packet_ok(RADIUS_PACKET *packet, int flags, decode_fail_t *reason)
 			}
 			seen_ma = true;
 			break;
+#endif
 		}
 
 		/*
@@ -2873,12 +2890,14 @@ RADIUS_PACKET *rad_recv(TALLOC_CTX *ctx, int fd, int flags)
 /** Verify the Request/Response Authenticator (and Message-Authenticator if present) of a packet
  *
  */
-int rad_verify(RADIUS_PACKET *packet, RADIUS_PACKET *original, char const *secret)
+int rad_verify(RADIUS_PACKET *packet, SRADIUS_UNUSED RADIUS_PACKET *original, SRADIUS_UNUSED char const *secret)
 {
 	uint8_t		*ptr;
 	int		length;
 	int		attrlen;
+#ifndef WITH_SRADIUS_ONLY
 	int		rcode;
+#endif
 	char		buffer[32];
 
 	if (!packet || !packet->data) return -1;
@@ -2890,11 +2909,14 @@ int rad_verify(RADIUS_PACKET *packet, RADIUS_PACKET *original, char const *secre
 	ptr = packet->data + RADIUS_HDR_LEN;
 	length = packet->data_len - RADIUS_HDR_LEN;
 	while (length > 0) {
+#ifndef WITH_SRADIUS_ONLY
 		uint8_t	msg_auth_vector[AUTH_VECTOR_LEN];
 		uint8_t calc_auth_vector[AUTH_VECTOR_LEN];
+#endif
 
 		attrlen = ptr[1];
 
+#ifndef WITH_SRADIUS_ONLY
 		switch (ptr[0]) {
 		default:	/* don't do anything. */
 			break;
@@ -2968,6 +2990,7 @@ int rad_verify(RADIUS_PACKET *packet, RADIUS_PACKET *original, char const *secre
 			memcpy(packet->data + 4, packet->vector, AUTH_VECTOR_LEN);
 			break;
 		} /* switch over the attributes */
+#endif		  /* WITH_SRADIUS_ONLY */
 
 		ptr += attrlen;
 		length -= attrlen;
@@ -2988,6 +3011,7 @@ int rad_verify(RADIUS_PACKET *packet, RADIUS_PACKET *original, char const *secre
 		return -1;
 	}
 
+#ifndef WITH_SRADIUS_ONLY
 #ifdef WITH_TLS
 	/*
 	 *	SRADIUS uses the authenticator field for matching
@@ -3057,6 +3081,7 @@ int rad_verify(RADIUS_PACKET *packet, RADIUS_PACKET *original, char const *secre
 				   packet->src_port);
 		return -1;
 	}
+#endif
 
 	return 0;
 }
@@ -3900,8 +3925,12 @@ ssize_t data2vp(TALLOC_CTX *ctx,
 	 *	then decode the tag.
 	 */
 	if (da->flags.has_tag && (datalen > 1) &&
-	    ((data[0] < 0x20) ||
-	     (da->flags.encrypt == FLAG_ENCRYPT_TUNNEL_PASSWORD))) {
+	    ((data[0] < 0x20)
+#ifndef WITH_SRADIUS_ONLY
+	     || (da->flags.encrypt == FLAG_ENCRYPT_TUNNEL_PASSWORD)
+#endif
+		    )) {
+	     
 		/*
 		 *	Only "short" attributes can be encrypted.
 		 */
@@ -3924,6 +3953,7 @@ ssize_t data2vp(TALLOC_CTX *ctx,
 		data = buffer;
 	}
 
+#ifndef WITH_SRADIUS_ONLY
 	/*
 	 *	Decrypt the attribute.
 	 */
@@ -4032,6 +4062,7 @@ ssize_t data2vp(TALLOC_CTX *ctx,
 			break;
 		} /* switch over encryption flags */
 	}
+#endif	/* WITH_SRADIUS_ONLY */
 
 	/*
 	 *	Double-check the length after decrypting the
@@ -4623,7 +4654,7 @@ int rad_decode(RADIUS_PACKET *packet, RADIUS_PACKET *original,
 	return 0;
 }
 
-
+#ifndef WITH_SRADIUS_ONLY
 /** Encode password
  *
  * We assume that the passwd buffer passed is big enough.
@@ -5023,6 +5054,7 @@ int rad_chap_encode(RADIUS_PACKET *packet, uint8_t *output, int id,
 
 	return 0;
 }
+#endif	/* WITH_SRADIUS_ONLYx */
 
 
 /** Seed the random number generator

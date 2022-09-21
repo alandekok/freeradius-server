@@ -24,7 +24,11 @@
 RCSID("$Id$")
 
 #include <freeradius-devel/radiusd.h>
+#ifndef WITH_SRADIUS_ONLY
 #include <freeradius-devel/md5.h>
+#else
+#include <freeradius-devel/sha1.h>
+#endif
 #include <freeradius-devel/channel.h>
 
 #include <pwd.h>
@@ -174,8 +178,13 @@ static ssize_t do_challenge(int sockfd)
 		exit(1);
 	}
 
+#ifndef WITH_SRADIUS_ONLY
 	fr_hmac_md5(challenge, (uint8_t const *) secret, strlen(secret),
 		    challenge, sizeof(challenge));
+#else
+	fr_hmac_sha1(challenge, (uint8_t const *) secret, strlen(secret),
+		    challenge, sizeof(challenge));
+#endif
 
 	r = fr_channel_write(sockfd, FR_CHANNEL_AUTH_RESPONSE, challenge, sizeof(challenge));
 	if (r <= 0) return r;

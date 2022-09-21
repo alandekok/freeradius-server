@@ -472,7 +472,11 @@ static state_entry_t *fr_state_entry_create(fr_state_t *state, REQUEST *request,
 			 *	to depend on the entire contents of State.
 			 */
 		} else if (vp->vp_length > sizeof(entry->state)) {
+#ifdef WITH_SRADIUS_ONLY
+			memcpy(entry->state, vp->vp_octets, sizeof(entry->state));
+#else
 			fr_md5_calc(entry->state, vp->vp_octets, vp->vp_length);
+#endif
 
 			/*
 			 *	Too small?  Use the whole thing, and
@@ -536,7 +540,11 @@ static state_entry_t *fr_state_find(fr_state_t *state, const char *server, RADIU
 		 *	to depend on the entire contents of State.
 		 */
 	} else if (vp->vp_length > sizeof(my_entry.state)) {
+#ifdef WITH_SRADIUS_ONLY
+		memcpy(my_entry.state, vp->vp_octets, sizeof(my_entry.state));
+#else
 		fr_md5_calc(my_entry.state, vp->vp_octets, vp->vp_length);
+#endif
 
 		/*
 		 *	Too small?  Use the whole thing, and

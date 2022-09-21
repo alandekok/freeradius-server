@@ -12,6 +12,8 @@
 
 RCSIDH(md5_h, "$Id$")
 
+#ifndef WITH_SRADIUS_ONLY
+
 #ifdef HAVE_INTTYPES_H
 #  include <inttypes.h>
 #endif
@@ -119,5 +121,5 @@ void	fr_md5_calc(uint8_t *out, uint8_t const *in, size_t inlen);
 #ifdef __cplusplus
 }
 #endif
-
+#endif
 #endif /* _FR_MD5_H */
