@@ -844,6 +844,9 @@ static int dual_tcp_accept(rad_listen_t *listener)
 
 	this->fd = newfd;
 	this->status = RAD_LISTEN_STATUS_INIT;
+#ifdef WITH_TLS
+	this->sradius = listener->sradius;
+#endif
 
 	this->parent = listener;
 	if (!rbtree_insert(listener->children, this)) {

@@ -5206,6 +5206,12 @@ RADIUS_PACKET *rad_alloc_reply(TALLOC_CTX *ctx, RADIUS_PACKET *packet)
 
 #ifdef WITH_TCP
 	reply->proto = packet->proto;
+#ifdef WITH_TLS
+	reply->sradius = packet->sradius;
+	if (reply->sradius) {
+		memcpy(reply->vector, packet->vector, sizeof(reply->vector));
+	}
+#endif
 #endif
 	return reply;
 }
