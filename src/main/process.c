@@ -2441,6 +2441,9 @@ static int insert_into_proxy_hash(REQUEST *request)
 		sock = this->data;
 		if (!fr_packet_list_socket_add(proxy_list, this->fd,
 					       sock->proto,
+#ifdef WITH_TLS
+					       this->sradius,
+#endif
 					       &sock->other_ipaddr, sock->other_port,
 					       this)) {
 
@@ -5463,6 +5466,9 @@ static void event_new_fd(rad_listen_t *this)
 				PTHREAD_MUTEX_LOCK(&proxy_mutex);
 				if (!fr_packet_list_socket_add(proxy_list, this->fd,
 							       sock->proto,
+#ifdef WITH_TLS
+							       this->sradius,
+#endif
 							       &sock->other_ipaddr, sock->other_port,
 							       this)) {
 					ERROR("Failed adding coa proxy socket");
@@ -5973,6 +5979,9 @@ static void create_default_proxy_listener(int af)
 	sock = this->data;
 	if (!fr_packet_list_socket_add(proxy_list, this->fd,
 				       sock->proto,
+#ifdef WITH_TLS
+				       this->sradius,
+#endif
 				       &sock->other_ipaddr, sock->other_port,
 				       this)) {
 		ERROR("Failed adding proxy socket");
