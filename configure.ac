@@ -484,7 +484,7 @@ if test "x$WITH_ASCEND_BINARY" = "xyes"; then
 fi
 
 dnl #
-dnl #  extra argument: --with-ascend-binary
+dnl #  extra argument: --with-sradius-only
 dnl #
 WITH_SRADIUS_ONLY=
 AC_ARG_WITH(sradius-only,
@@ -499,8 +499,8 @@ AC_ARG_WITH(sradius-only,
 if test "x$SRADIUS_ONLY" = "xyes"; then
   AC_DEFINE(WITH_SRADIUS_ONLY, [1], [build with only SRADIUS support (no MD4 / MD5)])
   SRADIUS_ONLY=yes
-  AC_SUBST(SRADIUS_ONLY)
 fi
+AC_SUBST(SRADIUS_ONLY)
 
 dnl #
 dnl #  extra argument: --with-threads

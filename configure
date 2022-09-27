@@ -655,6 +655,7 @@ SNMPWALK
 SNMPGET
 openssl_version_check_config
 WITH_DHCP
+SRADIUS_ONLY
 modconfdir
 dictdir
 raddbdir
@@ -753,6 +754,7 @@ with_radacctdir
 with_raddbdir
 with_dictdir
 with_ascend_binary
+with_sradius_only
 with_threads
 with_tcp
 with_vmps
@@ -1459,6 +1461,7 @@ Optional Packages:
   --with-raddbdir=DIR     directory for config files SYSCONFDIR/raddb
   --with-dictdir=DIR      directory for dictionary files DATAROOTDIR/freeradius
   --with-ascend-binary    include support for Ascend binary filter attributes (default=yes)
+  --with-sradius-only     build with only SRADIUS support (no MD4 / MD5) (default=no)
   --with-threads          use threads, if available.  (default=yes)
   --with-tcp              compile in TCP support. (default=yes)
   --with-vmps             compile in VMPS support. (default=yes)
@@ -5721,6 +5724,28 @@ if test "x$WITH_ASCEND_BINARY" = "xyes"; then
 $as_echo "#define WITH_ASCEND_BINARY 1" >>confdefs.h
 
 fi
+
+WITH_SRADIUS_ONLY=
+
+# Check whether --with-sradius-only was given.
+if test ${with_sradius_only+y}
+then :
+  withval=$with_sradius_only;  case "$withval" in
+  yes)
+    WITH_SRADIUS_ONLY=yes
+  *)
+   ;;
+  esac
+
+fi
+
+if test "x$SRADIUS_ONLY" = "xyes"; then
+
+printf "%s\n" "#define WITH_SRADIUS_ONLY 1" >>confdefs.h
+
+  SRADIUS_ONLY=yes
+fi
+
 
 WITH_THREADS=yes
 
