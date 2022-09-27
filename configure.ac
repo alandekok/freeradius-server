@@ -492,6 +492,7 @@ AC_ARG_WITH(sradius-only,
 [ case "$withval" in
   yes)
     WITH_SRADIUS_ONLY=yes
+    ;;
   *)
    ;;
   esac ]
