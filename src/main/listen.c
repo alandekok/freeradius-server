@@ -3197,6 +3197,8 @@ rad_listen_t *proxy_new_listener(TALLOC_CTX *ctx, home_server_t *home, uint16_t 
 		this->recv = proxy_tls_recv;
 		this->proxy_send = proxy_tls_send;
 
+		this->sradius = home->sradius;
+
 #ifdef WITH_COA_TUNNEL
 		if (home->recv_coa) {
 			RADCLIENT *client;
