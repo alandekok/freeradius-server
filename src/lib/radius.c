@@ -1011,7 +1011,9 @@ static ssize_t vp2data_any(RADIUS_PACKET const *packet,
 #endif	/* WITH_SRADIUS_ONLY */
 
 	default:
+#ifdef WITH_TLS
 	tag:
+#endif
 		if (vp->da->flags.has_tag && TAG_VALID(vp->tag)) {
 			if (vp->da->type == PW_TYPE_STRING) {
 				if (len > ((ssize_t) (room - 1))) len = room - 1;
