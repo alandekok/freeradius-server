@@ -2902,6 +2902,17 @@ int rad_verify(RADIUS_PACKET *packet, SRADIUS_UNUSED RADIUS_PACKET *original, SR
 
 	if (!packet || !packet->data) return -1;
 
+#ifdef WITH_TLS
+	/*
+	 *	SRADIUS uses the authenticator field for matching
+	 *	requests to responses, and does not otherwise verify
+	 *	it.
+	 */
+	if (packet->sradius) {
+		return 0;
+	}
+#endif
+
 	/*
 	 *	Before we allocate memory for the attributes, do more
 	 *	sanity checking.
