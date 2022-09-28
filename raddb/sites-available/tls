@@ -106,6 +106,12 @@ listen {
 #	check_client_connections = yes
 
 	#
+	#  Use SRADIUS.  Both the "client" and
+	#  "listen" sections have to match.
+	#
+#	sradius = yes
+
+	#
 	#  Connection limiting for sockets with "proto = tcp".
 	#
 	limit {
@@ -486,6 +492,12 @@ clients radsec {
 		#  higher than the ones for each individual
 		#  client.
 		#
+
+		#
+		#  Use SRADIUS.  Both the "client" and
+		#  "listen" sections have to match.
+		#
+#		sradius = yes
 	}
 }
 
@@ -513,6 +525,13 @@ home_server tls {
 	secret = radsec
 	proto = tcp
 	status_check = none
+
+	#
+	#  Use SRADIUS.  The outgoing proxy listener will
+	#  automatically use the home server definition for
+	#  src_ipaddr, tls, sradius, etc.
+	#
+#	sradius = yes
 
 	tls {
 		#
