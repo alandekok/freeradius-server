@@ -51,8 +51,6 @@ int fr_packet_cmp(RADIUS_PACKET const *a, RADIUS_PACKET const *b)
 	if (a->id > b->id) return +1;
 
 #ifdef WITH_TCP
-	fr_assert(a->proto == b->proto); /* both packets are from the the same socket */
-
 	/*
 	 *	TCP sockets have (by definition) the same src/dst
 	 *	IP/port combos.  We we can just ignore those fields.
@@ -618,6 +616,11 @@ RADIUS_PACKET **fr_packet_list_find_byreply(fr_packet_list_t *pl,
 #ifdef WITH_TCP
 	my_request.proto = reply->proto;
 #endif
+
+#ifdef WITH_TLS
+	my_request.sradius = reply->sradius;
+#endif
+
 	request = &my_request;
 
 	return rbtree_finddata(pl->tree, &request);
@@ -825,6 +828,7 @@ bool fr_packet_list_id_alloc(fr_packet_list_t *pl, int proto,
 			 *	number.
 			 */
 			ps->counter++;
+			id = 0;
 			memcpy(request->vector, &ps->counter, sizeof(ps->counter));
 			memset(request->vector + sizeof(ps->counter), 0, sizeof(request->vector) - sizeof(ps->counter));
 			break;
