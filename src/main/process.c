@@ -2752,6 +2752,11 @@ int request_proxy_reply(RADIUS_PACKET *packet)
 
 	PTHREAD_MUTEX_UNLOCK(&proxy_mutex);
 
+#ifdef WITH_TLS
+	packet->proto = request->proxy->proto;
+	packet->sradius = request->proxy->sradius;
+#endif
+
 	/*
 	 *	No reply, BUT the current packet fails verification:
 	 *	ignore it.  This does the MD5 calculations in the
