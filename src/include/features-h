@@ -79,3 +79,9 @@
 #    error Reverse CoA requests requires TLS
 #  endif
 #endif
+
+#ifdef WITH_SRADIUS_ONLY
+#  ifndef WITH_TLS
+#    error WITH_SRADIUS_ONLY requries WITH_TLS
+#  endif
+#endif
