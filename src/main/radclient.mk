@@ -2,7 +2,7 @@ TARGET		:= radclient
 SOURCES		:= radclient.c
 
 ifeq "$(SRADIUS_ONLY)" ""
-SOURCE		+= ${top_srcdir}/src/modules/rlm_mschap/smbdes.c \
+SOURCES		+= ${top_srcdir}/src/modules/rlm_mschap/smbdes.c \
 		   ${top_srcdir}/src/modules/rlm_mschap/mschap.c
 endif
 
