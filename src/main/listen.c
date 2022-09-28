@@ -771,6 +771,12 @@ static int dual_tcp_accept(rad_listen_t *listener)
 		close(newfd);
 		return 0;
 	}
+
+	if (client->sradius != listener->sradius) {
+		INFO("Ignoring connection to TLS socket from incompatible SRADIUS client");
+		close(newfd);
+		return 0;
+	}
 #endif
 
 	/*

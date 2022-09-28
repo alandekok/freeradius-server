@@ -75,6 +75,7 @@ typedef struct radclient {
 #endif
 #ifdef WITH_TLS
 	bool			tls_required;		//!< whether TLS encryption is required.
+	bool			sradius;		//!< whether this client is only for SRADIUS
 #endif
 
 #ifdef WITH_DYNAMIC_CLIENTS

@@ -528,6 +528,10 @@ static const CONF_PARSER client_config[] = {
 	{ "limit", FR_CONF_POINTER(PW_TYPE_SUBSECTION, NULL), (void const *) limit_config },
 #endif
 
+#ifdef WITH_TLS
+	{ "sradius", FR_CONF_OFFSET(PW_TYPE_BOOLEAN, RADCLIENT, sradius), NULL },
+#endif
+
 #ifdef WITH_DYNAMIC_CLIENTS
 	{ "dynamic_clients", FR_CONF_OFFSET(PW_TYPE_STRING, RADCLIENT, client_server), NULL },
 	{ "lifetime", FR_CONF_OFFSET(PW_TYPE_INTEGER, RADCLIENT, lifetime), NULL },
@@ -603,6 +607,11 @@ RADCLIENT_LIST *client_list_parse_section(CONF_SECTION *section, UNUSED bool tls
 		 */
 		if (tls_required != c->tls_required) {
 			cf_log_err_cs(cs, "Client does not have the same TLS configuration as the listener");
+			goto error;
+		}
+
+		if (!tls_required && c->sradius) {
+			cf_log_err_cs(cs, "SRADIUS requires TLS transport");
 			goto error;
 		}
 #endif
