@@ -773,7 +773,7 @@ static int dual_tcp_accept(rad_listen_t *listener)
 	}
 
 	if (client->sradius != listener->sradius) {
-		INFO("Ignoring connection to TLS socket from incompatible SRADIUS client");
+		INFO("Ignoring connection to TLS socket from incompatible SRADIUS client %s", client->shortname);
 		close(newfd);
 		return 0;
 	}
@@ -1086,6 +1086,11 @@ int common_socket_print(rad_listen_t const *this, char *buffer, size_t bufsize)
 #ifdef WITH_TLS
 	if (this->tls) {
 		ADDSTRING(" (TLS)");
+		FORWARD;
+	}
+
+	if (this->sradius) {
+		ADDSTRING(" (SRADIUS)");
 		FORWARD;
 	}
 #endif
