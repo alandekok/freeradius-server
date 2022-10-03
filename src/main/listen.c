@@ -1247,7 +1247,7 @@ int common_socket_parse(CONF_SECTION *cs, rad_listen_t *this)
 
 #ifdef WITH_SRADIUS_ONLY
 	if (!this->sradius) {
-		cf_log_err_cs(cs, "SRADIUS is required.");
+		cf_log_err_cs(cs, "This executable requires 'sradius = yes'");
 		return -1;
 	}
 #endif

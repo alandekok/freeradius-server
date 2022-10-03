@@ -948,7 +948,7 @@ home_server_t *home_server_afrom_cs(TALLOC_CTX *ctx, realm_config_t *rc, CONF_SE
 
 #ifdef WITH_SRADIUS_ONLY
 	if (!home->sradius) {
-		cf_log_err_cs(cs, "SRADIUS is required.");
+		cf_log_err_cs(cs, "This executable requires 'sradius = yes'");
 		goto error;
 	}
 #endif
