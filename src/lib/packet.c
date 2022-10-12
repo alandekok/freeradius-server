@@ -818,7 +818,6 @@ bool fr_packet_list_id_alloc(fr_packet_list_t *pl, int proto,
 			request->sradius = true;
 
 			fd = ps->sockfd;
-			id = fr_rand();
 
 			/*
 			 *	Increment the counter.  It has to be
