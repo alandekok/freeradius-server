@@ -1,2 +1,2 @@
 User-Name = sradius
-Cleartext-Password = hello
+User-Password = hello
