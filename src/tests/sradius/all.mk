@@ -10,8 +10,11 @@ BIN_PATH        := $(BUILD_PATH)/bin/local
 LIB_PATH        := $(BUILD_PATH)/lib/.libs/
 RADDB_PATH      := $(top_builddir)/raddb
 
+SRADIUS_TLS=$(shell $(BIN_PATH)/radiusd -xxxv | grep tls | awk '{print $$(NF) }' )
+ifeq "$(SRADIUS_TLS)" "yes"
+
 # Port defines for proxy and sradius
-port_radiusd_auth 	:= 12340
+port_radiusdauth 	:= 12340
 port_sradiusd_auth 	:= 12341
 
 #
@@ -106,3 +109,12 @@ $(OUTPUT)/%: $(DIR)/% test.sradius.stop_server test.sradius.start_server
 $(TEST):
 	$(Q)$(MAKE) --no-print-directory test.sradius.stop_server
 	@touch $(BUILD_DIR)/tests/$@
+
+else
+#
+#  No TLS
+#
+.PHONY: $(TEST)
+$(TEST):
+	@echo SRADIUS is not available in this executable
+endif
