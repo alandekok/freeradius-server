@@ -10,11 +10,10 @@ BIN_PATH        := $(BUILD_PATH)/bin/local
 LIB_PATH        := $(BUILD_PATH)/lib/.libs/
 RADDB_PATH      := $(top_builddir)/raddb
 
-SRADIUS_TLS=$(shell $(BIN_PATH)/radiusd -xxxv | grep tls | awk '{print $$(NF) }' )
-ifeq "$(SRADIUS_TLS)" "yes"
+ifneq "$(OPENSSL_LIBS)" ""
 
 # Port defines for proxy and sradius
-port_radiusdauth 	:= 12340
+port_radiusd_auth 	:= 12340
 port_sradiusd_auth 	:= 12341
 
 #
@@ -74,8 +73,14 @@ define STOP_SERVER
 	$(Q)rm -f $(TEST_PATH)/$(1).pid $(TEST_PATH)/vars-$(1).conf
 endef
 
+#
+#  Ensure that the certificate files are created.
+#
+$(RADDB_PATH)/certs/server.crt: $(RADDB_PATH)/certs/server.cnf
+	@$(MAKE) -C $(RADDB_PATH)/certs
+
 # radiusd
-test.sradius.start_server: $(TEST_PATH)/vars.conf
+test.sradius.start_server: $(TEST_PATH)/vars.conf $(RADDB_PATH)/certs/server.crt
 	$(call START_SERVER,radiusd)
 	$(call START_SERVER,sradiusd)
 
