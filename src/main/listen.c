@@ -1317,7 +1317,7 @@ int common_socket_parse(CONF_SECTION *cs, rad_listen_t *this)
 			return -1;
 		}
 
-		if (this->sradius) {
+		if (cf_pair_find(tls, "sradius") != NULL) {
 			cf_log_err_cs(cs,
 				   "SRADIUS is not available in this executable");
 			return -1;
