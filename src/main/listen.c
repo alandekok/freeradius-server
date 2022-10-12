@@ -1316,13 +1316,6 @@ int common_socket_parse(CONF_SECTION *cs, rad_listen_t *this)
 				   "TLS transport is not available in this executable");
 			return -1;
 		}
-
-		cp = cf_pair_find(tls, "sradius");
-		if (cp) {
-			cf_log_err_cp(cp,
-				   "SRADIUS is not available in this executable");
-			return -1;
-		}
 #endif	/* WITH_TLS */
 
 #endif	/* WITH_TCP */

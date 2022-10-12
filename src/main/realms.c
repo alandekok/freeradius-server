@@ -967,17 +967,6 @@ home_server_t *home_server_afrom_cs(TALLOC_CTX *ctx, realm_config_t *rc, CONF_SE
 		cf_log_err_cs(cs, "TLS transport is not available in this executable");
 		goto error;
 	}
-
-	{
-		CONF_PAIR *cp;
-
-		cp = cf_pair_find(tls, "sradius");
-		if (cp) {
-			cf_log_err_cp(cp,
-				      "SRADIUS is not available in this executable");
-			goto error;
-		}
-	}
 #endif
 
 	/*
