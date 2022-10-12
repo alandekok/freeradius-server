@@ -1281,6 +1281,14 @@ int common_socket_parse(CONF_SECTION *cs, rad_listen_t *this)
 				return -1;
 			}
 
+#ifdef WITH_SRADIUS
+			if (this->sradius && (this->tls->tls_min_version < TLS1_3_VERSION)) {
+				cf_log_err_cs(tls, "SRADIUS MUST have 'tls_min_version = 1.3' or later");
+				return -2;
+			}
+#endif
+
+
 #ifdef HAVE_PTHREAD_H
 			if (pthread_mutex_init(&sock->mutex, NULL) < 0) {
 				rad_assert(0 == 1);

@@ -1133,6 +1133,13 @@ home_server_t *home_server_afrom_cs(TALLOC_CTX *ctx, realm_config_t *rc, CONF_SE
 			if (rcode < 0) goto error;
 
 			if (!home->connect_timeout || (home->connect_timeout > 30)) home->connect_timeout = 30;
+
+#ifdef WITH_SRADIUS
+			if (home->sradius && (home->tls->tls_min_version < TLS1_3_VERSION)) {
+				cf_log_err_cs(tls, "SRADIUS MUST have 'tls_min_version = 1.3' or later");
+				goto error;
+			}
+#endif
 		}
 #endif
 	} /* end of parse home server */
