@@ -1242,8 +1242,10 @@ int common_socket_parse(CONF_SECTION *cs, rad_listen_t *this)
 		}
 #endif	/* WITH_PROXY */
 
+#ifdef WITH_TLS
 	rcode = cf_item_parse(cs, "sradius", FR_ITEM_POINTER(PW_TYPE_BOOLEAN, &this->sradius), NULL);
 	if (rcode < 0) return -1;
+#endif
 
 #ifdef WITH_SRADIUS_ONLY
 	if (!this->sradius) {
