@@ -16,6 +16,8 @@ ifneq "$(OPENSSL_LIBS)" ""
 port_radiusd_auth 	:= 12340
 port_sradiusd_auth 	:= 12341
 
+export port_radiusd_auth port_sradiusd_auth TEST_PATH LIB_PATH
+
 #
 #  Run the full tests
 #
@@ -27,23 +29,6 @@ $(eval $(call TEST_BOOTSTRAP))
 #  TODO: We need to fix the src/tests/radiusd.mk
 #  to be able spin up multiple instances
 #$(eval $(call RADIUSD_SERVICE,radiusd,$(OUTPUT)))
-
-.PHONY: $(TEST_PATH)/vars.conf
-$(TEST_PATH)/vars.conf:
-	$(Q)echo "SRADIUS-TEST Generating $(notdir $@)"
-	$(Q)echo "# radiusd test configuration file.  Do not install.  Delete at any time." > $@
-	$(Q)echo "port_radiusd_auth =" $(port_radiusd_auth) >> $@
-	$(Q)echo "port_sradiusd_auth =" $(port_sradiusd_auth) >> $@
-	$(Q)echo "maindir =" $(top_builddir) >> $@
-	$(Q)echo "libdir =" $(LIB_PATH) >> $@
-	$(Q)echo "testdir =" $(TEST_PATH) >> $@
-	$(Q)echo 'logdir = $${testdir}' >> $@
-	$(Q)echo 'raddb = $(RADDB_PATH)' >> $@
-	$(Q)echo 'radacctdir = $${testdir}' >> $@
-	$(Q)echo 'modconfdir = $${raddb}/mods-config' >> $@
-	$(Q)echo 'certdir = $${raddb}/certs' >> $@
-	$(Q)echo 'cadir   = $${raddb}/certs' >> $@
-
 define START_SERVER
 	$(eval RADIUSD_RUN := $(BIN_PATH)/radiusd -xxx -l $(TEST_PATH)/$(1).log -D $(top_builddir)/share -d $(TEST_PATH) -n $(1))
 	$(Q)printf "SRADIUS-TEST Starting $(1) server... "
@@ -70,7 +55,7 @@ define STOP_SERVER
 			echo "Cannot kill $(TEST_PATH)/$(1).pid"; \
 		fi; \
 	fi
-	$(Q)rm -f $(TEST_PATH)/$(1).pid $(TEST_PATH)/vars-$(1).conf
+	$(Q)rm -f $(TEST_PATH)/$(1).pid
 endef
 
 #
@@ -80,7 +65,7 @@ $(RADDB_PATH)/certs/server.crt: $(RADDB_PATH)/certs/server.cnf
 	@$(MAKE) -C $(RADDB_PATH)/certs
 
 # radiusd
-test.sradius.start_server: $(TEST_PATH)/vars.conf $(RADDB_PATH)/certs/server.crt
+test.sradius.start_server: $(RADDB_PATH)/certs/server.crt
 	$(call START_SERVER,radiusd)
 	$(call START_SERVER,sradiusd)
 
@@ -104,9 +89,9 @@ $(OUTPUT)/%: $(DIR)/% test.sradius.stop_server test.sradius.start_server
 		echo ==============================;                   \
 		tail -10 $(TEST_PATH)/radclient.log;                   \
 		echo ==============================;                   \
-		echo "RADIUSD:   $(RADIUSD_RUN)";                      \
+		echo "RADIUSD: $(RADIUSD_RUN)";                        \
 		echo "SRADIUS: $(TESTBIN)/radclient -xf $(TEST_PATH)/auth.txt -D share/ 127.0.0.1:$(port_radiusd_auth) auth $(SECRET)"; \
-		exit 1;                                                     \
+		exit 1;                                                \
 	fi
 
 	$(Q)touch $@
