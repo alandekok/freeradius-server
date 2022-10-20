@@ -143,8 +143,11 @@ char const *fr_packet_codes[FR_MAX_PACKET_CODE] = {
   "47",
   "48",
   "49",
-  "IP-Address-Allocate",
-  "IP-Address-Release",			//!< 50
+  "IP-Address-Allocate",		//!< 50
+  "IP-Address-Release",
+  "52",
+  "Status-Realm-Request",
+  "Status-Realm-Response",
 };
 
 
@@ -2043,6 +2046,7 @@ int rad_sign(RADIUS_PACKET *packet, RADIUS_PACKET const *original,
 
 	case PW_CODE_ACCESS_REQUEST:
 	case PW_CODE_STATUS_SERVER:
+	case PW_CODE_STATUS_REALM_REQUEST:
 	default:
 		break;		/* packet->vector is already random bytes */
 	}
@@ -2079,6 +2083,7 @@ int rad_sign(RADIUS_PACKET *packet, RADIUS_PACKET const *original,
 		case PW_CODE_ACCESS_ACCEPT:
 		case PW_CODE_ACCESS_REJECT:
 		case PW_CODE_ACCESS_CHALLENGE:
+		case PW_CODE_STATUS_REALM_RESPONSE:
 			memcpy(hdr->vector, original->vector, AUTH_VECTOR_LEN);
 			break;
 
@@ -2114,6 +2119,7 @@ int rad_sign(RADIUS_PACKET *packet, RADIUS_PACKET const *original,
 		 */
 	case PW_CODE_ACCESS_REQUEST:
 	case PW_CODE_STATUS_SERVER:
+	case PW_CODE_STATUS_REALM_REQUEST:
 		break;
 
 		/*
@@ -2471,7 +2477,10 @@ bool rad_packet_ok(RADIUS_PACKET *packet, int flags, decode_fail_t *reason)
 	 *	Message-Authenticator is required in Status-Server
 	 *	packets, otherwise they can be trivially forged.
 	 */
-	if (hdr->code == PW_CODE_STATUS_SERVER) require_ma = true;
+	if ((hdr->code == PW_CODE_STATUS_SERVER) ||
+	    (hdr->code == PW_CODE_STATUS_REALM_REQUEST)) {
+		require_ma = true;
+	}
 
 	/*
 	 *	It's also required if the caller asks for it.
@@ -2934,6 +2943,7 @@ int rad_verify(RADIUS_PACKET *packet, RADIUS_PACKET *original, char const *secre
 	switch (packet->code) {
 	case PW_CODE_ACCESS_REQUEST:
 	case PW_CODE_STATUS_SERVER:
+	case PW_CODE_STATUS_REALM_REQUEST:
 		/*
 		 *	The authentication vector is random
 		 *	nonsense, invented by the client.
@@ -2964,6 +2974,7 @@ int rad_verify(RADIUS_PACKET *packet, RADIUS_PACKET *original, char const *secre
 	case PW_CODE_DISCONNECT_NAK:
 	case PW_CODE_COA_ACK:
 	case PW_CODE_COA_NAK:
+	case PW_CODE_STATUS_REALM_RESPONSE:
 		rcode = calc_replydigest(packet, original, secret);
 		if (rcode > 1) {
 			fr_strerror_printf("Received %s packet "

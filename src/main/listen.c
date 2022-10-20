@@ -508,6 +508,42 @@ int rad_status_server(REQUEST *request)
 	return 0;
 }
 
+/*
+ *	Process and reply to a Status-Realm-Request
+ *	Like rad_authenticate and rad_accounting this should
+ *	live in it's own file but it's so small we don't bother.
+ */
+int rad_status_realm(REQUEST *request)
+{
+	int rcode = RLM_MODULE_OK;
+	DICT_VALUE *dval;
+
+	dval = dict_valbyname(PW_AUTZ_TYPE, 0, "Status-Realm-Request");
+	if (dval) {
+		rcode = process_authorize(dval->value, request);
+	} else {
+		rcode = RLM_MODULE_OK;
+	}
+
+	switch (rcode) {
+	case RLM_MODULE_OK:
+	case RLM_MODULE_UPDATED:
+		request->reply->code = PW_CODE_STATUS_REALM_RESPONSE;
+		break;
+
+	case RLM_MODULE_FAIL:
+	case RLM_MODULE_HANDLED:
+		request->reply->code = 0; /* don't reply */
+		break;
+
+	default:
+	case RLM_MODULE_REJECT:
+		request->reply->code = PW_CODE_STATUS_REALM_RESPONSE;
+		break;
+	}
+	return 0;
+}
+
 #ifdef WITH_TCP
 static int dual_tcp_recv(rad_listen_t *listener)
 {
@@ -613,6 +649,16 @@ static int dual_tcp_recv(rad_listen_t *listener)
 			return 0;
 		}
 		fun = rad_status_server;
+		break;
+
+	case PW_CODE_STATUS_REALM_REQUEST:
+		if (!main_config.status_server) {
+			FR_STATS_INC(auth, total_unknown_types);
+			WARN("Ignoring Status-Realm-Request due to security configuration");
+			rad_free(&sock->packet);
+			return 0;
+		}
+		fun = rad_status_realm;
 		break;
 
 	default:
@@ -1711,6 +1757,15 @@ static int auth_socket_recv(rad_listen_t *listener)
 		fun = rad_status_server;
 		break;
 
+	case PW_CODE_STATUS_REALM_REQUEST:
+		if (!main_config.status_server) {
+			FR_STATS_INC(auth, total_unknown_types);
+			WARN("Ignoring Status-Realm-Request due to security configuration");
+			return 0;
+		}
+		fun = rad_status_realm;
+		break;
+
 	default:
 		rad_recv_discard(listener->fd);
 		FR_STATS_INC(auth, total_unknown_types);
@@ -1825,6 +1880,15 @@ static int acct_socket_recv(rad_listen_t *listener)
 			return 0;
 		}
 		fun = rad_status_server;
+		break;
+
+	case PW_CODE_STATUS_REALM_REQUEST:
+		if (!main_config.status_server) {
+			FR_STATS_INC(auth, total_unknown_types);
+			WARN("Ignoring Status-Realm-Request due to security configuration");
+			return 0;
+		}
+		fun = rad_status_realm;
 		break;
 
 	default:

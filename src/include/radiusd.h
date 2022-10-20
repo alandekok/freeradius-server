@@ -576,6 +576,7 @@ RADCLIENT_LIST *listener_find_client_list(fr_ipaddr_t const *ipaddr, uint16_t po
 #endif
 rad_listen_t *listener_find_byipaddr(fr_ipaddr_t const *ipaddr, uint16_t port, int proto);
 int rad_status_server(REQUEST *request);
+int rad_status_realm(REQUEST *request);
 
 /* event.c */
 typedef enum event_corral_t {

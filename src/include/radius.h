@@ -61,6 +61,8 @@ typedef enum {
 	PW_CODE_COA_REQUEST		= 43,	//!< RFC3575/RFC5176 - CoA-Request
 	PW_CODE_COA_ACK			= 44,	//!< RFC3575/RFC5176 - CoA-Ack (positive)
 	PW_CODE_COA_NAK			= 45,	//!< RFC3575/RFC5176 - CoA-Nak (not willing to perform)
+	PW_CODE_STATUS_REALM_REQUEST   	= 53,	//!< ping / traceroute / realm request
+	PW_CODE_STATUS_REALM_RESPONSE   = 54,	//!< ping / traceroute / realm response
 	PW_CODE_MAX			= 255,	//!< Maximum possible code
 } PW_CODE;
 

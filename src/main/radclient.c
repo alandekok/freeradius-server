@@ -92,7 +92,7 @@ static void NEVER_RETURNS usage(void)
 {
 	fprintf(stderr, "Usage: radclient [options] server[:port] <command> [<secret>]\n");
 
-	fprintf(stderr, "  <command>              One of auth, acct, status, coa, disconnect or auto.\n");
+	fprintf(stderr, "  <command>              One of auth, acct, status, coa, disconnect or status-realm auto.\n");
 	fprintf(stderr, "  -4                     Use IPv4 address of server\n");
 	fprintf(stderr, "  -6                     Use IPv6 address of server.\n");
 	fprintf(stderr, "  -c <count>             Send each packet 'count' times.\n");
@@ -126,6 +126,7 @@ static const FR_NAME_NUMBER request_types[] = {
 	{ "status",	PW_CODE_STATUS_SERVER },
 	{ "disconnect",	PW_CODE_DISCONNECT_REQUEST },
 	{ "coa",	PW_CODE_COA_REQUEST },
+	{ "status-realm", PW_CODE_STATUS_REALM_REQUEST },
 	{ "auto",	PW_CODE_UNDEFINED },
 
 	{ NULL, 0}
@@ -275,6 +276,7 @@ static void radclient_get_port(PW_CODE type, uint16_t *port)
 	case PW_CODE_ACCESS_REQUEST:
 	case PW_CODE_ACCESS_CHALLENGE:
 	case PW_CODE_STATUS_SERVER:
+	case PW_CODE_STATUS_REALM_REQUEST:
 		if (*port == 0) *port = getport("radius");
 		if (*port == 0) *port = PW_AUTH_UDP_PORT;
 		return;
@@ -696,6 +698,10 @@ static int radclient_init(TALLOC_CTX *ctx, rc_file_pair_t *files)
 					request->filter_code = PW_CODE_UNDEFINED;
 					break;
 				}
+				break;
+
+			case PW_CODE_STATUS_REALM_REQUEST:
+				request->filter_code = PW_CODE_STATUS_REALM_RESPONSE;
 				break;
 
 			case PW_CODE_UNDEFINED:
