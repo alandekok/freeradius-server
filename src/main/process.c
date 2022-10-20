@@ -2955,6 +2955,9 @@ static int setup_post_proxy_fail(REQUEST *request)
 	} else if (packet->code == PW_CODE_DISCONNECT_REQUEST) {
 		dval = dict_valbyname(PW_POST_PROXY_TYPE, 0, "Fail-Disconnect");
 #endif
+	} else if (packet->code == PW_CODE_STATUS_REALM_REQUEST) {
+		dval = dict_valbyname(PW_POST_PROXY_TYPE, 0,
+				      "Fail-Status-Realm");
 	} else {
 		WARN("Unknown packet type in Post-Proxy-Type Fail: ignoring");
 		return 0;
