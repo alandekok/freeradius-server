@@ -480,25 +480,26 @@ authorize {
 #
 #	}
 
+	#
+	#	Handle Status-Realm-Request
+	#
 	Autz-Type Status-Realm-Request {
+		#
+		#  Must have a User-Name
+		#
 		if (!&User-Name) {
 			update reply {
-				Error-Cause := Missing-Attribute
+				&Error-Cause := Invalid-Request
 			}
 			reject
 		}
-
-		update reply {
-		       Reply-Message := "Yes!"
-		}
-
 		#
-		#  This should NOT fall back to any DEFAULT!
+		#  The realm configuration should NOT fall back to any DEFAULT!
 		#
 		suffix
 		if (noop) {
 			update reply {
-				Error-Cause := Request-Not-Routable
+				&Error-Cause := Proxy-Request-Not-Routable
 			}
 			reject
 		}
@@ -1111,6 +1112,9 @@ pre-proxy {
 	#  Status-Realm-Request packets are handled specially.
 	#
 	if (Packet-Type == Status-Realm-Request) {
+		#
+		#  We can't proxy it if the hop count was exceeded
+		#
 		if (&Max-Hop-Count == 0) {
 			update reply {
 				&Error-Cause := Hop-Count-Exceeded
@@ -1119,10 +1123,22 @@ pre-proxy {
 			reject
 		}
 
+		#
+		#  Don't set Max-Hop-Count if it wasn't in the packet,
+		#  but if it exists, decrement it.
+		#
 		if (&Max-Hop-Count) {
 			update proxy-request {
 				&Max-Hop-Count := "%{expr: %{Max-Hop-Count} - 1}"
 			}
+		}
+
+		#
+		#  Tell the other servers about us, and who we are.
+		#
+		update proxy-request {
+			Proxy-Name += "1example.org"
+			Proxy-Identifier += "freeradius test"
 		}
 
 		return
@@ -1210,5 +1226,21 @@ post-proxy {
 #	Post-Proxy-Type Fail-Accounting {
 #			detail.example.com
 #	}
+
+	#
+	#  Failed to proxy it.  Echo back what we've found,
+	#  including the hop count.
+	#
+	Post-Proxy-Type Fail-Status-Realm {
+		update reply {
+			&Error-Cause := Proxy-Processing-Error
+		}
+
+		update reply {
+			&Max-Hop-Count := &Max-Hop-Count
+			&Proxy-Information := &Proxy-Information[*]
+		}
+
+	}
 }
 }

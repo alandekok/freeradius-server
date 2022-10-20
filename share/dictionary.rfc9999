@@ -13,3 +13,14 @@
 ATTRIBUTE	Max-Hop-Count				241.12	integer
 
 VALUE	Error-Cause			Hop-Count-Exceeded	509
+
+#
+#  245.3 and 245.4 are likely DHCP-Options and DHCPv6-Options
+#
+ATTRIBUTE	Proxy-Information			245.5	tlv
+
+# same format as Operator-Name
+ATTRIBUTE	Proxy-Name				245.5.1	string
+
+# Similar to NAS-Identifier - contains site-specific information about the proxy
+ATTRIBUTE	Proxy-Identifier			245.5.2	string
