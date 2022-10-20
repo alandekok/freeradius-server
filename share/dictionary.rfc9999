@@ -1,0 +1,15 @@
+# -*- text -*-
+# Copyright (C) 2022 The FreeRADIUS Server project and contributors
+# This work is licensed under CC-BY version 4.0 https://creativecommons.org/licenses/by/4.0
+#
+##############################################################################
+#
+#	DON'T USE THIS!  Only for testing!
+#
+#	$Id$
+#
+##############################################################################
+
+ATTRIBUTE	Max-Hop-Count				241.12	integer
+
+VALUE	Error-Cause			Hop-Count-Exceeded	509

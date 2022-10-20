@@ -480,6 +480,46 @@ authorize {
 #
 #	}
 
+	Autz-Type Status-Realm-Request {
+		if (!&User-Name) {
+			update reply {
+				Error-Cause := Missing-Attribute
+			}
+			reject
+		}
+
+		update reply {
+		       Reply-Message := "Yes!"
+		}
+
+		#
+		#  This should NOT fall back to any DEFAULT!
+		#
+		suffix
+		if (noop) {
+			update reply {
+				Error-Cause := Request-Not-Routable
+			}
+			reject
+		}
+
+		#
+		#  Our realm: echo back the hop count.
+		#
+		if (Realm == "example.org") {
+			update reply {
+				&Max-Hop-Count := &Max-Hop-Count
+			}
+
+			#
+			#  Don't proxy it.
+			#
+			update control {
+				&Proxy-To-Realm !* ANY
+			}
+		}
+	}
+
 	#
 	#  RADIUS/TLS (or RadSec) connections are processed through
 	#  this section.  See sites-available/tls, and the configuration
@@ -1067,6 +1107,27 @@ post-auth {
 #  Only a few modules currently have this method.
 #
 pre-proxy {
+	#
+	#  Status-Realm-Request packets are handled specially.
+	#
+	if (Packet-Type == Status-Realm-Request) {
+		if (&Max-Hop-Count == 0) {
+			update reply {
+				&Error-Cause := Hop-Count-Exceeded
+			}
+
+			reject
+		}
+
+		if (&Max-Hop-Count) {
+			update proxy-request {
+				&Max-Hop-Count := "%{expr: %{Max-Hop-Count} - 1}"
+			}
+		}
+
+		return
+	}
+
 	# Before proxing the request add an Operator-Name attribute identifying
 	# if the operator-name is found for this client.
 	# No need to uncomment this if you have already enabled this in

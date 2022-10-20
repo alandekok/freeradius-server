@@ -119,6 +119,8 @@ $INCLUDE dictionary.rfc7930
 $INCLUDE dictionary.rfc8045
 $INCLUDE dictionary.rfc8559
 
+$INCLUDE dictionary.rfc9999
+
 #
 #	Mostly values which have been allocated by IANA under
 #	"expert review", but which don't have an RFC associated with them.
