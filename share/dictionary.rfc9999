@@ -17,10 +17,19 @@ VALUE	Error-Cause			Hop-Count-Exceeded	509
 #
 #  245.3 and 245.4 are likely DHCP-Options and DHCPv6-Options
 #
-ATTRIBUTE	Proxy-Information			245.5	tlv
+ATTRIBUTE	Server-Information			245.5	tlv
 
 # same format as Operator-Name
-ATTRIBUTE	Proxy-Name				245.5.1	string
+ATTRIBUTE	Server-Operator-Name			245.5.1	string
 
-# Similar to NAS-Identifier - contains site-specific information about the proxy
-ATTRIBUTE	Proxy-Identifier			245.5.2	string
+# Similar to NAS-Identifier - contains site-specific information about the server
+ATTRIBUTE	Server-Identifier			245.5.2	string
+
+# Similar to NAS-IP-Address - contains site-specific IP information about the server
+ATTRIBUTE	Server-IP-Address			245.5.3	ipaddr
+
+# Similar to NAS-IPb6-Address - contains site-specific IP information about the server
+ATTRIBUTE	Server-IPv6-Address			245.5.4	ipaddr
+
+# Copied from Max-Hop-Count
+ATTRIBUTE	Server-Hop-Count			245.5.5	integer

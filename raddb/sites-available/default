@@ -1124,6 +1124,15 @@ pre-proxy {
 		}
 
 		#
+		#  Tell the other servers about us, and who we are.
+		#
+		update proxy-request {
+			Server-Operator-Name += "1example.org"
+			Server-Identifier += "freeradius test"
+			Server-Hop-Count += &Max-Hop-Count
+		}
+
+		#
 		#  Don't set Max-Hop-Count if it wasn't in the packet,
 		#  but if it exists, decrement it.
 		#
@@ -1131,14 +1140,6 @@ pre-proxy {
 			update proxy-request {
 				&Max-Hop-Count := "%{expr: %{Max-Hop-Count} - 1}"
 			}
-		}
-
-		#
-		#  Tell the other servers about us, and who we are.
-		#
-		update proxy-request {
-			Proxy-Name += "1example.org"
-			Proxy-Identifier += "freeradius test"
 		}
 
 		return
@@ -1238,7 +1239,7 @@ post-proxy {
 
 		update reply {
 			&Max-Hop-Count := &Max-Hop-Count
-			&Proxy-Information := &Proxy-Information[*]
+			&Server-Information := &Server-Information[*]
 		}
 
 	}
