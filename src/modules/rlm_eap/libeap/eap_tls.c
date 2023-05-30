@@ -599,36 +599,8 @@ static EAPTLS_PACKET *eaptls_extract(REQUEST *request, EAP_DS *eap_ds, fr_tls_st
 	tlspacket->flags = eap_ds->response->type.data[0];
 
 	/*
-	 *	A quick sanity check of the flags.  If we've been told
-	 *	that there's a length, and there isn't one, then stop.
+	 *	eaptls_verify() ensures that all of the flags are correct.
 	 */
-	if (TLS_LENGTH_INCLUDED(tlspacket->flags) &&
-	    (tlspacket->length < 5)) { /* flags + TLS message length */
-		REDEBUG("(TLS) EAP Invalid packet received: Length bit is set,"
-			"but packet too short to contain length field");
-		talloc_free(tlspacket);
-		return NULL;
-	}
-
-	/*
-	 *	If the final TLS packet is larger than we can handle, die
-	 *	now.
-	 *
-	 *	Likewise, if the EAP packet says N bytes, and the TLS
-	 *	packet says there's fewer bytes, it's a problem.
-	 */
-	if (TLS_LENGTH_INCLUDED(tlspacket->flags)) {
-		memcpy(&data_len, &eap_ds->response->type.data[1], 4);
-		data_len = ntohl(data_len);
-		if (data_len > MAX_RECORD_SIZE) {
-			REDEBUG("(TLS) EAP Reassembled data will be %u bytes, "
-				"greater than the size that we can handle (" STRINGIFY(MAX_RECORD_SIZE) " bytes)",
-				data_len);
-			talloc_free(tlspacket);
-			return NULL;
-		}
-	}
-
 	switch (status) {
 	/*
 	 *	The TLS Message Length field is four octets, and
