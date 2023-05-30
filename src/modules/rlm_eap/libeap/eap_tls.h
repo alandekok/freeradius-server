@@ -62,7 +62,9 @@ int	eaptls_fail(eap_handler_t *handler, int peap_flag) CC_HINT(nonnull);
 int	eaptls_request(EAP_DS *eap_ds, tls_session_t *ssn) CC_HINT(nonnull);
 
 
+void	TLS_PRF(SSL *ssl, unsigned char *sec, size_t seclen, struct iovec *iov, size_t iovcnt, unsigned char *key, size_t keylen);
 void	T_PRF(unsigned char const *secret, unsigned int secret_len, char const *prf_label, unsigned char const *seed,  unsigned int seed_len, unsigned char *out, unsigned int out_len) CC_HINT(nonnull(1,3,6));
+void	eaptls_gen_keys_only(REQUEST *request, SSL *s, char const *label, uint8_t const *context, UNUSED size_t context_size, uint8_t *out, size_t outlen);
 void	eaptls_gen_mppe_keys(REQUEST *request, SSL *s, char const *label, uint8_t const *context, size_t context_size);
 void	eapttls_gen_challenge(SSL *s, uint8_t *buffer, size_t size);
 void	eaptls_gen_eap_key(eap_handler_t *handler);
