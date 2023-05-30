@@ -563,7 +563,7 @@ static EAPTLS_PACKET *eaptls_extract(REQUEST *request, EAP_DS *eap_ds, fr_tls_st
 {
 	EAPTLS_PACKET	*tlspacket;
 	uint32_t	data_len = 0;
-	uint32_t	len = 0;
+	uint32_t	obit = 0;
 	uint8_t		*data = NULL;
 
 	if (status == FR_TLS_INVALID) return NULL;
@@ -612,30 +612,19 @@ static EAPTLS_PACKET *eaptls_extract(REQUEST *request, EAP_DS *eap_ds, fr_tls_st
 	 *	length should solve the problem.
 	 */
 	case FR_TLS_FIRST_FRAGMENT:
+		obit = TLS_OUTER_TLV_INCLUDED(tlspacket->flags) << 2;
+
+		/*
+		 *	@todo - decode outer TLVs, too
+		 */
+
+		/* FALL-THROUGH */
+
 	case FR_TLS_LENGTH_INCLUDED:
 	case FR_TLS_MORE_FRAGMENTS_WITH_LENGTH:
-		if (tlspacket->length < 5) { /* flags + TLS message length */
-			REDEBUG("(TLS) EAP Invalid packet received: Expected length, got none");
-			talloc_free(tlspacket);
-			return NULL;
-		}
-
-		/*
-		 *	Extract all the TLS fragments from the
-		 *	previous eap_ds Start appending this
-		 *	fragment to the above ds
-		 */
-		memcpy(&data_len, &eap_ds->response->type.data[1], sizeof(uint32_t));
+		memcpy(&data_len, &eap_ds->response->type.data[1], 4);
 		data_len = ntohl(data_len);
-		data = (eap_ds->response->type.data + 5/*flags+TLS-Length*/);
-		len = eap_ds->response->type.length - 5/*flags+TLS-Length*/;
-
-		/*
-		 *	Hmm... this should be an error, too.
-		 */
-		if (data_len > len) {
-			data_len = len;
-		}
+		data = eap_ds->response->type.data + 5 + obit;
 		break;
 
 		/*
@@ -643,8 +632,8 @@ static EAPTLS_PACKET *eaptls_extract(REQUEST *request, EAP_DS *eap_ds, fr_tls_st
 		 */
 	case FR_TLS_MORE_FRAGMENTS:
 	case FR_TLS_OK:
-		data_len = eap_ds->response->type.length - 1/*flags*/;
-		data = eap_ds->response->type.data + 1/*flags*/;
+		data_len = eap_ds->response->type.length - 1;
+		data = eap_ds->response->type.data + 1;
 		break;
 
 	default:
@@ -661,6 +650,7 @@ static EAPTLS_PACKET *eaptls_extract(REQUEST *request, EAP_DS *eap_ds, fr_tls_st
 			talloc_free(tlspacket);
 			return NULL;
 		}
+
 		memcpy(tlspacket->data, data, data_len);
 	}
 
