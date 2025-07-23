@@ -191,6 +191,7 @@ static request_t *request_from_file(TALLOC_CTX *ctx, FILE *fp, fr_client_t *clie
 	fr_pair_t	*vp;
 	request_t	*request;
 	fr_dcursor_t	cursor;
+	unlang_result_t result = UNLANG_RESULT_NOT_SET;
 
 	static int	number = 0;
 
@@ -353,7 +354,7 @@ static request_t *request_from_file(TALLOC_CTX *ctx, FILE *fp, fr_client_t *clie
 	 *	New async listeners
 	 */
 	request->async = talloc_zero(request, fr_async_t);
-	unlang_call_push(NULL, request, server_cs, UNLANG_TOP_FRAME);
+	unlang_call_push(&result, request, server_cs, UNLANG_TOP_FRAME);
 
 	return request;
 }
