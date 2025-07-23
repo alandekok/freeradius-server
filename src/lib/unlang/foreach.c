@@ -513,11 +513,12 @@ static unlang_action_t unlang_foreach(unlang_result_t *p_result, request_t *requ
 	return unlang_foreach_xlat_init(p_result, request, frame, state);
 }
 
-static unlang_action_t unlang_break(unlang_result_t *p_result, request_t *request, unlang_stack_frame_t *frame)
+static unlang_action_t unlang_break(UNUSED unlang_result_t *p_result, request_t *request, unlang_stack_frame_t *frame)
 {
 	unlang_action_t			ua;
 	unlang_stack_t			*stack = request->stack;
-	unsigned int break_depth;
+	unsigned int			depth;
+	unlang_result_t			result;
 
 	RDEBUG2("%s", unlang_ops[frame->instruction->type].name);
 
@@ -527,24 +528,43 @@ static unlang_action_t unlang_break(unlang_result_t *p_result, request_t *reques
 	 *	into account.  We do however want to record
 	 *	the current section rcode.
 	 */
-	*p_result = frame->section_result;
+	result = frame->my_result;
 
 	/*
 	 *	Stop at the next break point, or if we hit
 	 *	the a top frame.
 	 */
-	ua = unwind_to_op_flag(&break_depth, request->stack, UNLANG_OP_FLAG_BREAK_POINT);
-	repeatable_clear(&stack->frame[break_depth]);
+	ua = unwind_to_op_flag(&depth, request->stack, UNLANG_OP_FLAG_BREAK_POINT);
+	repeatable_clear(&stack->frame[depth]);
+	stack->frame[depth].my_result = result;
 	return ua;
 }
 
 static unlang_action_t unlang_continue(UNUSED unlang_result_t *p_result, request_t *request, unlang_stack_frame_t *frame)
 {
+	unlang_action_t			ua;
 	unlang_stack_t			*stack = request->stack;
+	unsigned int			depth;
+	unlang_result_t			result;
 
 	RDEBUG2("%s", unlang_ops[frame->instruction->type].name);
 
-	return unwind_to_op_flag(NULL, stack, UNLANG_OP_FLAG_CONTINUE_POINT);
+	/*
+	 *	As we're unwinding intermediary frames we
+	 *	won't be taking their rcodes or priorities
+	 *	into account.  We do however want to record
+	 *	the current section rcode.
+	 */
+	result = frame->my_result;
+
+	/*
+	 *	Stop at the next continue point, or if we hit
+	 *	the a top frame.
+	 */
+	ua = unwind_to_op_flag(&depth, request->stack, UNLANG_OP_FLAG_CONTINUE_POINT);
+	repeatable_clear(&stack->frame[depth]);
+	stack->frame[depth].my_result = result;
+	return ua;
 }
 
 static unlang_t *unlang_compile_foreach(unlang_t *parent, unlang_compile_ctx_t *unlang_ctx, CONF_ITEM const *ci)

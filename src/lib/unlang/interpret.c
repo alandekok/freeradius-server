@@ -63,8 +63,7 @@ static size_t unlang_frame_action_table_len = NUM_ELEMENTS(unlang_frame_action_t
 
 typedef enum {
 	P_RESULT_LOCATION_UNKNOWN = 0,
-	P_RESULT_LOCATION_FRAME,
-	P_RESULT_LOCATION_SCRATCH,
+	P_RESULT_LOCATION_SELF,
 	P_RESULT_LOCATION_STATE,
 	P_RESULT_LOCATION_MODULE_RCTX,
 	P_RESULT_LOCATION_FUNCTION_RCTX
@@ -89,14 +88,8 @@ static int find_p_result_location(p_result_location_t *location, void **chunk, r
 			return i;
 		}
 
-		if (ptr == &frame->section_result) {
-			*location = P_RESULT_LOCATION_FRAME;
-			*chunk = NULL;
-			return i;
-		}
-
-		if (ptr == &frame->scratch_result) {
-			*location = P_RESULT_LOCATION_SCRATCH;
+		if (ptr == &frame->my_result) {
+			*location = P_RESULT_LOCATION_SELF;
 			*chunk = NULL;
 			return i;
 		}
@@ -135,9 +128,8 @@ static int find_p_result_location(p_result_location_t *location, void **chunk, r
 }
 
 static fr_table_num_ordered_t const p_result_location_table[] = {
-	{ L("frame"),		P_RESULT_LOCATION_FRAME },
 	{ L("module_rctx"),	P_RESULT_LOCATION_MODULE_RCTX },
-	{ L("scratch"),		P_RESULT_LOCATION_SCRATCH },
+	{ L("self"),		P_RESULT_LOCATION_SELF },
 	{ L("state"),		P_RESULT_LOCATION_STATE },
 	{ L("unknown"),		P_RESULT_LOCATION_UNKNOWN }
 };
@@ -191,7 +183,7 @@ static void frame_dump(request_t *request, unlang_stack_frame_t *frame, bool wit
 
 	fr_assert(MOD_ACTION_VALID(frame->p_result->priority));
 
-	if (is_private_result(frame)) {
+	if (frame->p_result) {
 		int location;
 		p_result_location_t type;
 		void *chunk;
@@ -204,11 +196,10 @@ static void frame_dump(request_t *request, unlang_stack_frame_t *frame, bool wit
 			location, frame->p_result, chunk ? talloc_get_name(chunk) : "<none>"
 			);
 	} else {
-		RDEBUG2("sec_rcode      %s", fr_table_str_by_value(mod_rcode_table, frame->section_result.rcode, "<invalid>"));
-		RDEBUG2("sec_priority   %s", mod_action_name[frame->section_result.priority]);
+		RDEBUG2("p_result       NULL - results will be discarded");
 	}
-	RDEBUG2("scr_rcode      %s", fr_table_str_by_value(mod_rcode_table, frame->scratch_result.rcode, "<invalid>"));
-	RDEBUG2("scr_priority   %s", mod_action_name[frame->scratch_result.priority]);
+	RDEBUG2("my_rcode       %s", fr_table_str_by_value(mod_rcode_table, frame->my_result.rcode, "<invalid>"));
+	RDEBUG2("my_priority    %s", mod_action_name[frame->my_result.priority]);
 	RDEBUG2("top_frame      %s", is_top_frame(frame) ? "yes" : "no");
 	RDEBUG2("repeat         %s", is_repeatable(frame) ? "yes" : "no");
 	RDEBUG2("yielded        %s", is_yielded(frame) ? "yes" : "no");
@@ -261,10 +252,7 @@ void stack_dump_with_actions(request_t *request)
 
 /** Push a new frame onto the stack
  *
- * @param[in] p_result		Where to write the result of evaluating the section.
- *				If NULL, results will be written to frame->section_result and will
- *				be automatically merged with the next highest frame when this one
- *				is popped.
+ * @param[in] p_result		Where to write the result of evaluating the instruction.  May be NULL
  * @param[in] request		to push the frame onto.
  * @param[in] instruction	One or more unlang_t nodes describing the operations to execute.
  * @param[in] conf		Configuration for the frame.  If NULL, the following values areused:
@@ -309,6 +297,17 @@ int unlang_interpret_push(unlang_result_t *p_result, request_t *request,
 		return - 1;
 	}
 
+	/*
+	 *	NULL means "store result to parent frame".
+	 *
+	 *	If there is no parent frame, then the result has to go somewhere.
+	 */
+	if (!p_result) {
+		frame = &stack->frame[stack->depth];
+		p_result = &frame->my_result;
+		fr_assert(!conf->top_frame);
+	}
+
 	stack->depth++;
 
 	/*
@@ -318,6 +317,8 @@ int unlang_interpret_push(unlang_result_t *p_result, request_t *request,
 	memset(frame, 0, sizeof(*frame));
 
 	frame->instruction = instruction;
+	frame->p_result = p_result;
+	frame->indent = request->log.indent;
 
 	if (do_next_sibling) {
 		fr_assert(instruction != NULL);
@@ -327,11 +328,6 @@ int unlang_interpret_push(unlang_result_t *p_result, request_t *request,
 
 	frame->flag = UNLANG_FRAME_FLAG_NONE;
 	if (conf->top_frame) top_frame_set(frame);
-
-	frame->p_result = p_result ? p_result : &frame->section_result;
-	*frame->p_result = conf->default_result;
-
-	frame->indent = request->log.indent;
 
 	if (!instruction) return 0;
 
@@ -437,7 +433,7 @@ static void instruction_retry_handler(UNUSED fr_timer_list_t *tl, UNUSED fr_time
 
 /** Update the current result after each instruction, and after popping each stack frame
  *
- * @note Sets stack->scratch to be the the result of the frame being popped.
+ * @note Sets frame->p_result to be the the result of the frame being popped.
  *
  * @param[in] request			The current request.
  * @return
@@ -445,11 +441,11 @@ static void instruction_retry_handler(UNUSED fr_timer_list_t *tl, UNUSED fr_time
  *	- UNLANG_FRAME_ACTION_POP	the final result has been calculated for this frame.
  */
 static inline CC_HINT(always_inline)
-unlang_frame_action_t result_calculate(request_t *request, unlang_stack_frame_t *frame, unlang_result_t *result)
+unlang_frame_action_t result_calculate(request_t *request, unlang_stack_frame_t *frame)
 {
 	unlang_t const	*instruction = frame->instruction;
 	unlang_stack_t	*stack = request->stack;
-	unlang_result_t *frame_result = frame->p_result;
+	unlang_frame_action_t fa;
 
 	if (is_unwinding(frame)) {
 		RDEBUG4("** [%i] %s - unwinding frame", stack->depth, __FUNCTION__);
@@ -460,21 +456,28 @@ unlang_frame_action_t result_calculate(request_t *request, unlang_stack_frame_t 
 	 *	Don't calculate a new return code for the frame, just skip
 	 *	to the next instruction.
 	 */
-	if (result->rcode == RLM_MODULE_NOT_SET) {
+	if (frame->my_result.rcode == RLM_MODULE_NOT_SET) {
 		RDEBUG4("** [%i] %s - skipping frame, no result set",
 			stack->depth, __FUNCTION__);
 		return UNLANG_FRAME_ACTION_NEXT;
 	}
 
-	fr_assert(MOD_ACTION_VALID(frame_result->priority));
-	fr_assert(MOD_ACTION_VALID(result->priority));
+	if (!frame->p_result) {
+		RDEBUG4("** [%i] %s - skipping frame, result is not used",
+			stack->depth, __FUNCTION__);
+		return UNLANG_FRAME_ACTION_NEXT;
+	}
 
-	RDEBUG4("** [%i] %s - have (%s %s) frame or module returned (%s %s)",
+	fr_assert(MOD_ACTION_VALID(frame->my_result.priority));
+
+	fa = UNLANG_FRAME_ACTION_NEXT;
+
+	RDEBUG4("** [%i] %s - parent has (%s %s) frame returned (%s %s)",
 		stack->depth, __FUNCTION__,
-		fr_table_str_by_value(mod_rcode_table, frame_result->rcode, "<invalid>"),
-		mod_action_name[frame_result->priority],
-		fr_table_str_by_value(mod_rcode_table, result->rcode, "<invalid>"),
-		mod_action_name[result->priority]);
+		fr_table_str_by_value(mod_rcode_table, frame->p_result->rcode, "<invalid>"),
+		mod_action_name[frame->p_result->priority],
+		fr_table_str_by_value(mod_rcode_table, frame->my_result.rcode, "<invalid>"),
+		mod_action_name[frame->my_result.priority]);
 
 	/*
 	 *	Update request->rcode if the instruction says we should
@@ -483,45 +486,44 @@ unlang_frame_action_t result_calculate(request_t *request, unlang_stack_frame_t 
 	 *	This is the field that's evaluated in unlang conditions
 	 *	like `if (ok)`.
 	 */
-	if (is_rcode_set(frame) && (request->rcode != result->rcode)) {
+	if (is_rcode_set(frame) && (request->rcode != frame->my_result.rcode)) {
 		RDEBUG3("Setting request->rcode to '%s'",
-			fr_table_str_by_value(rcode_table, result->rcode, "<INVALID>"));
-		request->rcode = result->rcode;
+			fr_table_str_by_value(rcode_table, frame->my_result.rcode, "<INVALID>"));
+		request->rcode = frame->my_result.rcode;
 	}
 
 	/*
-	*	The array holds a default priority for this return
-	*	code.  Grab it in preference to any unset priority.
+	*	The instruction holds a default priority for this return code.  Grab it in preference to any
+	*	unset priority.
 	*/
-	if (result->priority == MOD_ACTION_NOT_SET) {
-		result->priority = instruction->actions.actions[result->rcode];
+	if (frame->my_result.priority == MOD_ACTION_NOT_SET) {
+		frame->my_result.priority = instruction->actions.actions[frame->my_result.rcode];
 
-		fr_assert(MOD_ACTION_VALID(result->priority));
+		fr_assert(MOD_ACTION_VALID(frame->my_result.priority));
 
-		RDEBUG4("** [%i] %s - using default instruction priority for %s, %s",
+		RDEBUG4("** [%i] %s - using default instruction priority for (%s %s)",
 			stack->depth, __FUNCTION__,
-			fr_table_str_by_value(mod_rcode_table, result->rcode, "<invalid>"),
-			mod_action_name[result->priority]);
+			fr_table_str_by_value(mod_rcode_table, frame->my_result.rcode, "<invalid>"),
+			mod_action_name[frame->my_result.priority]);
 	}
 
 	/*
-	 *	Deal with special priorities which indicate we need
-	 *	to do something in addition to modifying the frame's
-	 *	rcode.
+	 *	Deal with special priorities which indicate that we need to do something in addition to
+	 *	modifying the frame's rcode.
 	 */
-	switch (result->priority) {
+	switch (frame->my_result.priority) {
 	/*
-	 *	The child's prioriy value indicates we
-	 *	should return from this frame.
+	 *	The child's prioriy value indicates we should return from this frame.
 	 */
 	case MOD_ACTION_RETURN:
+		frame->my_result.priority = MOD_ACTION_NOT_SET;
+		fa = UNLANG_FRAME_ACTION_POP;
+
 		RDEBUG4("** [%i] %s - action says to return with (%s %s)",
 			stack->depth, __FUNCTION__,
-			fr_table_str_by_value(mod_rcode_table, result->rcode, "<invalid>"),
-			mod_action_name[result->priority]);
-
-		*frame_result = UNLANG_RESULT_RCODE(result->rcode);
-		return UNLANG_FRAME_ACTION_POP;
+			fr_table_str_by_value(mod_rcode_table, frame->my_result.rcode, "<invalid>"),
+			mod_action_name[frame->my_result.priority]);
+		goto finalize;
 
 	/*
 	 *	Reject means we should return, but
@@ -533,16 +535,16 @@ unlang_frame_action_t result_calculate(request_t *request, unlang_stack_frame_t 
 	 *	after the module returns...
 	 */
 	case MOD_ACTION_REJECT:
+		frame->my_result.priority = MOD_ACTION_NOT_SET;
+		fa = UNLANG_FRAME_ACTION_POP;
+
 		RDEBUG4("** [%i] %s - action says to return with (%s %s)",
 			stack->depth, __FUNCTION__,
 			fr_table_str_by_value(mod_rcode_table, RLM_MODULE_REJECT, "<invalid>"),
-			mod_action_name[result->priority]);
+			mod_action_name[frame->my_result.priority]);
+		goto finalize;
 
-		*frame_result = UNLANG_RESULT_RCODE(RLM_MODULE_REJECT);
-		return UNLANG_FRAME_ACTION_POP;
-
-	case MOD_ACTION_RETRY:
-	{
+	case MOD_ACTION_RETRY: {
 		unlang_retry_t *retry = frame->retry;
 
 		RDEBUG4("** [%i] %s - action says to retry with",
@@ -571,7 +573,7 @@ unlang_frame_action_t result_calculate(request_t *request, unlang_stack_frame_t 
 				if (fr_timer_in(retry, unlang_interpret_event_list(request)->tl, &retry->ev, instruction->actions.retry.mrd,
 						false, instruction_retry_handler, request) < 0) {
 					RPEDEBUG("Failed inserting retry event");
-					*frame_result = UNLANG_RESULT_RCODE(RLM_MODULE_FAIL);
+					frame->my_result = UNLANG_RESULT_RCODE(RLM_MODULE_FAIL);
 					goto finalize;
 				}
 			}
@@ -595,7 +597,7 @@ unlang_frame_action_t result_calculate(request_t *request, unlang_stack_frame_t 
 					REDEBUG("Retries hit max_rtx_count (%u) - returning 'timeout'", instruction->actions.retry.mrc);
 
 				timeout:
-					*frame_result = UNLANG_RESULT_RCODE(RLM_MODULE_TIMEOUT);
+					frame->my_result = UNLANG_RESULT_RCODE(RLM_MODULE_TIMEOUT);
 					goto finalize;
 				}
 			}
@@ -613,9 +615,10 @@ unlang_frame_action_t result_calculate(request_t *request, unlang_stack_frame_t 
 		unlang_frame_perf_cleanup(frame);
 		frame_state_init(stack, frame);	/* Don't change p_result */
 		return UNLANG_FRAME_ACTION_RETRY;
-	default:
-		break;
 	}
+
+	default:		/* some other priority, or UNSET */
+		break;
 	}
 
 finalize:
@@ -623,65 +626,25 @@ finalize:
 	 *	We're higher or equal to previous priority, remember this
 	 *	return code and priority.
 	 */
-	if (result->priority >= frame_result->priority) {
-		fr_assert(MOD_ACTION_VALID(result->priority));
-		fr_assert(MOD_ACTION_VALID(frame_result->priority));
+	if ((frame->my_result.priority >= frame->p_result->priority) &&
+	    (frame->my_result.rcode != frame->p_result->rcode)) {
+		fr_assert(MOD_ACTION_VALID(frame->my_result.priority));
+		fr_assert(MOD_ACTION_VALID(frame->p_result->priority));
 
 		RDEBUG4("** [%i] %s - overwriting existing result (%s %s) with higher priority (%s %s)",
 			stack->depth, __FUNCTION__,
-			fr_table_str_by_value(mod_rcode_table, frame_result->rcode, "<invalid>"),
-			mod_action_name[frame_result->priority],
-			fr_table_str_by_value(mod_rcode_table, result->rcode, "<invalid>"),
-			mod_action_name[result->priority]);
-		*frame->p_result = *result;
+			fr_table_str_by_value(mod_rcode_table, frame->p_result->rcode, "<invalid>"),
+			mod_action_name[frame->p_result->priority],
+			fr_table_str_by_value(mod_rcode_table, frame->my_result.rcode, "<invalid>"),
+			mod_action_name[frame->my_result.priority]);
+		*frame->p_result = frame->my_result;
 	}
 
 	/*
-	 *	Determine if we should continue processing siblings
-	 *	or pop the frame ending the section.
+	 *	Return whether or not the frame should be popped, or
+	 *	we should go on to the next one.
 	 */
-	return frame->next ? UNLANG_FRAME_ACTION_NEXT : UNLANG_FRAME_ACTION_POP;
-}
-
-/** Function called to merge inter-stack-frame results
- *
- * This function is called whenever a frame is popped from the stack.
- *
- * 'result' is the result from the frame being popped, and 'frame' is the next highest frame in the stack.
- *
- * The logic here is very similar to result_eval(), with two important differences:
- * - The priority of the lower frame is ignored, and the default priority of the higher frame is used.
- *   Unless the higher frame's priority is MOD_ACTION_NOT_SET, in which case the lower frame's priority is used.
- */
-static inline CC_HINT(always_inline)
-unlang_frame_action_t result_pop(request_t *request, unlang_stack_frame_t *frame, unlang_result_t *result)
-{
-	unlang_stack_t	*stack = request->stack;
-	unlang_result_t our_result = *result;
-
-	fr_assert(MOD_ACTION_VALID(result->priority));
-
-	/*
-	 *	When a stack frame is being popped, the priority of the
-	 *	source (lower) frame is ignored, and the default priority
-	 *	of the destination (higher) frame is used.
-	 *
-	 *	We could (easily) add support for preserving the priority
-	 *	from the lower frame, if the priority of the higher frame
-	 *	was MOD_ACTION_NOT_SET, but there are no concrete use
-	 *	cases for this yet.
-	 */
-	if (result->rcode != RLM_MODULE_NOT_SET) {
-		fr_assert(MOD_ACTION_VALID(frame->instruction->actions.actions[result->rcode]));
-		our_result.priority = frame->instruction->actions.actions[result->rcode];
-	}
-
-	RDEBUG4("** [%i] %s - using instruction priority for higher frame (%s, %s)",
-		stack->depth, __FUNCTION__,
-		fr_table_str_by_value(mod_rcode_table, our_result.rcode, "<invalid>"),
-		mod_action_name[our_result.priority]);
-
-	return result_calculate(request, frame, &our_result);
+	return fa;
 }
 
 static inline CC_HINT(always_inline) void instruction_done_debug(request_t *request, unlang_stack_frame_t *frame, unlang_t const *instruction)
@@ -692,22 +655,13 @@ static inline CC_HINT(always_inline) void instruction_done_debug(request_t *requ
 		/*
 		 *	If we're at debug level 1, don't emit the closing
 		 *	brace as the opening brace wasn't emitted.
-		 *
-		 *	Not a typo, we don't want to print the scratch_result
-		 *	here, aka the ones the section actually returned,
-		 *	vs the section result, which may have just been left
-		 *	at defaults.
 		 */
 		if (RDEBUG_ENABLED && !RDEBUG_ENABLED2) {
-			RDEBUG("# %s %s%s%s", frame->instruction->debug_name,
-				frame->p_result == &frame->section_result ? "(" : "))",
-				fr_table_str_by_value(mod_rcode_table, frame->p_result->rcode, "<invalid>"),
-				frame->p_result == &frame->section_result ? "(" : "))");
+			RDEBUG("# %s (%s)", frame->instruction->debug_name,
+				fr_table_str_by_value(mod_rcode_table, frame->my_result.rcode, "<invalid>"));
 		} else {
-			RDEBUG2("} # %s %s%s%s", frame->instruction->debug_name,
-				frame->p_result == &frame->section_result ? "(" : "((",
-				fr_table_str_by_value(mod_rcode_table, frame->p_result->rcode, "<invalid>"),
-				frame->p_result == &frame->section_result ? ")" : "))");
+			RDEBUG2("} # %s (%s)", frame->instruction->debug_name,
+				fr_table_str_by_value(mod_rcode_table, frame->my_result.rcode, "<invalid>"));
 		}
 	}
 }
@@ -722,19 +676,24 @@ static inline CC_HINT(always_inline) void instruction_done_debug(request_t *requ
  * @param[in] request			The current request.
  * @param[in] frame			The current stack frame.
  * @return
+ *	- UNLANG_FRAME_ACTION_YIELD	yield to the scheduler
  *	- UNLANG_FRAME_ACTION_NEXT	evaluate more instructions in the current stack frame
  *					which may not be the same frame as when this function
  *					was called.
  *	- UNLANG_FRAME_ACTION_POP	the final result has been calculated for this frame.
  */
 static inline CC_HINT(always_inline)
-unlang_frame_action_t frame_eval(request_t *request, unlang_stack_frame_t *frame)
+unlang_frame_action_t frame_eval(request_t *request, unlang_stack_frame_t *frame, bool just_calculate)
 {
 	unlang_stack_t	*stack = request->stack;
-	unlang_result_t *scratch = &frame->scratch_result;
 
 	/*
-	 *	Loop over all the instructions in this list.
+	 *	If we're unwinding, just merge the results back in.
+	 */
+	if (is_unwinding(frame) || just_calculate) goto calculate_result;
+
+	/*
+	 *	Loop until this instruction says stop / yield / pushed child / done.
 	 */
 	while (frame->instruction) {
 		unlang_t const		*instruction = frame->instruction;
@@ -810,14 +769,14 @@ unlang_frame_action_t frame_eval(request_t *request, unlang_stack_frame_t *frame
 		 *	after this point, and the cached instruction
 		 *	should be used instead.
 		 */
-		ua = frame->process(&frame->scratch_result, request, frame);
+		ua = frame->process(&frame->my_result, request, frame);
 
-		fr_assert(MOD_ACTION_VALID(scratch->priority));
+		fr_assert(MOD_ACTION_VALID(frame->my_result.priority));
 
 		RDEBUG4("** [%i] %s << %s (%s %s)", stack->depth, __FUNCTION__,
 			fr_table_str_by_value(unlang_action_table, ua, "<INVALID>"),
-			fr_table_str_by_value(mod_rcode_table, scratch->rcode, "<INVALID>"),
-			mod_action_name[scratch->priority]);
+			fr_table_str_by_value(mod_rcode_table, frame->my_result.rcode, "<INVALID>"),
+			mod_action_name[frame->my_result.priority]);
 
 		/*
 		 *	If the frame is cancelled we ignore the
@@ -863,8 +822,8 @@ unlang_frame_action_t frame_eval(request_t *request, unlang_stack_frame_t *frame
 			unlang_frame_perf_yield(frame);
 			yielded_set(frame);
 			RDEBUG4("** [%i] %s - yielding with current (%s %s)", stack->depth, __FUNCTION__,
-				fr_table_str_by_value(mod_rcode_table, scratch->rcode, "<invalid>"),
-				mod_action_name[scratch->priority]);
+				fr_table_str_by_value(mod_rcode_table, frame->my_result.rcode, "<invalid>"),
+				mod_action_name[frame->my_result.priority]);
 			return UNLANG_FRAME_ACTION_YIELD;
 
 		/*
@@ -873,9 +832,9 @@ unlang_frame_action_t frame_eval(request_t *request, unlang_stack_frame_t *frame
 		 */
 		case UNLANG_ACTION_FAIL:
 			/*
-			 *	Let unlang_calculate figure out if this is the final result
+			 *	Let result_calculate() figure out if this is the final result
 			 */
-			frame->scratch_result = UNLANG_RESULT_RCODE(RLM_MODULE_FAIL);
+			frame->my_result = UNLANG_RESULT_RCODE(RLM_MODULE_FAIL);
 			FALL_THROUGH;
 
 		/*
@@ -890,7 +849,7 @@ unlang_frame_action_t frame_eval(request_t *request, unlang_stack_frame_t *frame
 			 *	out the rcode for the frame, so get what we'll
 			 *	actually return.
 			 */
-			fa = result_calculate(request, frame, &frame->scratch_result);
+			fa = result_calculate(request, frame);
 
 			instruction_done_debug(request, frame, instruction);
 
@@ -911,7 +870,7 @@ unlang_frame_action_t frame_eval(request_t *request, unlang_stack_frame_t *frame
 			break;
 
 		/*
-		 *	Execute the next instruction in this frame
+		 *	Skip this instruction, and instead execute the next one.
 		 */
 		case UNLANG_ACTION_EXECUTE_NEXT:
 			if (has_debug_braces(instruction)) {
@@ -921,17 +880,20 @@ unlang_frame_action_t frame_eval(request_t *request, unlang_stack_frame_t *frame
 			break;
 		} /* switch over return code from the interpret function */
 
+		/*
+		 *	For both EXECUTE_NEXT and CALCULATE_RESULT.
+		 */
 		frame_next(stack, frame);
 	}
 
 pop:
-	fr_assert(MOD_ACTION_VALID(frame->p_result->priority));
+	fr_assert(!frame->p_result || MOD_ACTION_VALID(frame->p_result->priority));
 
-	RDEBUG4("** [%i] %s - done current subsection with (%s %s), %s",
+	RDEBUG4("** [%i] %s - done current instruction with (%s %s), %s",
 		stack->depth, __FUNCTION__,
-		fr_table_str_by_value(mod_rcode_table, frame->p_result->rcode, "<invalid>"),
-		mod_action_name[frame->p_result->priority],
-		frame->p_result == &(frame->section_result) ? "will set higher frame rcode" : "will NOT set higher frame rcode (p_result)");
+		fr_table_str_by_value(mod_rcode_table, frame->my_result.rcode, "<invalid>"),
+		mod_action_name[frame->my_result.priority],
+		frame->p_result ? "will set higher frame rcode" : "will NOT set higher frame rcode (p_result==NULL)");
 
 	return UNLANG_FRAME_ACTION_POP;
 }
@@ -960,6 +922,8 @@ CC_HINT(hot) rlm_rcode_t unlang_interpret(request_t *request, bool running)
 	 */
 	unlang_frame_action_t	fa = is_unwinding(frame) ? UNLANG_FRAME_ACTION_POP : UNLANG_FRAME_ACTION_NEXT;
 
+	bool just_calculate = false;
+
 #ifndef NDEBUG
 	if (DEBUG_ENABLED5) DEBUG("###### unlang_interpret is starting");
 	DUMP_STACK;
@@ -968,6 +932,9 @@ CC_HINT(hot) rlm_rcode_t unlang_interpret(request_t *request, bool running)
 	fr_assert(!unlang_request_is_scheduled(request)); /* if we're running it, it can't be scheduled */
 	fr_assert_msg(intp, "request has no interpreter associated");
 
+	/*
+	 *	We resume on unwind, too.
+	 */
 	RDEBUG4("** [%i] %s - interpret entered", stack->depth, __FUNCTION__);
 	if (!running) intp->funcs.resume(request, intp->uctx);
 
@@ -977,111 +944,32 @@ CC_HINT(hot) rlm_rcode_t unlang_interpret(request_t *request, bool running)
 
 		RDEBUG4("** [%i] %s - frame action %s", stack->depth, __FUNCTION__,
 			fr_table_str_by_value(unlang_frame_action_table, fa, "<INVALID>"));
+
+		/*
+		 *	Run the frame.  This either has us continue with a sibling (execute next)
+		 */
+		frame = &stack->frame[stack->depth];
+		fa = frame_eval(request, frame, just_calculate);
 		switch (fa) {
-		next:
-			RDEBUG4("** [%i] %s - frame action next", stack->depth, __FUNCTION__);
-			FALL_THROUGH;
-
-		case UNLANG_FRAME_ACTION_NEXT:	/* Evaluate the current frame */
-			frame = &stack->frame[stack->depth];
-			fa = frame_eval(request, frame);
-			if (fa != UNLANG_FRAME_ACTION_POP) continue;
-
-			RDEBUG4("** [%i] %s - frame action %s", stack->depth, __FUNCTION__,
-				fr_table_str_by_value(unlang_frame_action_table, fa, "<INVALID>"));
-			FALL_THROUGH;
-
-		case UNLANG_FRAME_ACTION_POP:				/* Pop this frame and check the one beneath it */
-		{
-			bool top_frame = is_top_frame(frame);
-			bool private_result = is_private_result(frame);
-
-			unlang_result_t section_result = frame->section_result; /* record the result of the frame before we pop it*/
-
-			DUMP_STACK;
 			/*
-			 *	Head on back up the stack
-			 */
-			frame_pop(request, stack);
-			RDEBUG4("** [%i] %s - frame popped", stack->depth, __FUNCTION__);
-
-			/*
-			 *	Update the stack frame
-			 */
-			frame = &stack->frame[stack->depth];
-			DUMP_STACK;
-
-			/*
-			 *	Transition back to the C stack
+			 *	Retry the current frame.  Except this has already been done in frame_eval(),
+			 *	so that function never returns RETRY.
 			 *
-			 *	We still need to merge in the previous frame's result,
-			 *	but we don't care about the action, as we're returning.
+			 *	Similarly, frame_eval has already calculated the result, and onlt returns next
+			 *	/ yield / pop.
 			 */
-			if (top_frame) {
-				if (!private_result) result_calculate(request, frame, &section_result);
-				break;	/* stop */
-			}
+		case UNLANG_FRAME_ACTION_RETRY:
+			fr_assert(0);
+			return RLM_MODULE_FAIL;
 
 			/*
-			 *	Don't process the section result for a frame if
-			 *	the result is being consumed by a module.
+			 *	Go to the next instruction, which was either just pushed onto the stack, or is
+			 *	already updated in frame->instruction.
 			 */
-			if (private_result) {
-				fa = is_unwinding(frame) ? UNLANG_FRAME_ACTION_POP : UNLANG_FRAME_ACTION_NEXT;
-			/*
-			 *	Merge lower frame into higher frame.
-			 *
-			 *	this _MUST_ be done, even on resume, because the
-			 *	section result needs to be updated for the frame
-			 *	being resumed, in case it cares about the rcode
-			 *	like transaction sections.
-			 */
-			} else {
-				fa = result_pop(request, frame, &section_result);
-			}
-
-			/*
-			 *	Resume a "foreach" loop, or a "load-balance" section
-			 *	or anything else that needs to be checked on the way
-			 *	back on up the stack.  Here we just resume evaluating
-			 *	the frame, we don't advance the instruction.
-			 */
-			if (!is_unwinding(frame) && is_repeatable(frame)) goto next;
-
-			/*
-			 *	Close out the section we entered earlier
-			 */
-			instruction_done_debug(request, frame, frame->instruction);
-
-			fr_assert(MOD_ACTION_VALID(frame->section_result.priority));
-
-			/*
-			 *	If we're continuing after popping a frame
-			 *	then we advance the instruction else we
-			 *	end up executing the same code over and over...
-			 */
-			switch (fa) {
-			case UNLANG_FRAME_ACTION_NEXT:
-				DEBUG4("** [%i] %s - continuing after subsection with (%s %s)",
-					stack->depth, __FUNCTION__,
-					fr_table_str_by_value(mod_rcode_table, frame->section_result.rcode, "<invalid>"),
-				        mod_action_name[frame->section_result.priority]);
-				frame_next(stack, frame);
-				goto next;
-
-			/*
-			 *	Else if we're really done with this frame
-			 *	print some helpful debug...
-			 */
-			default:
-				RDEBUG4("** [%i] %s - done current subsection with (%s %s)",
-					stack->depth, __FUNCTION__,
-					fr_table_str_by_value(mod_rcode_table, frame->section_result.rcode, "<invalid>"),
-					mod_action_name[frame->section_result.priority]);
-				continue;
-			}
-
-		}
+		case UNLANG_FRAME_ACTION_NEXT:
+			fr_assert(frame->instruction != NULL);
+			just_calculate = false;
+			continue;
 
 		case UNLANG_FRAME_ACTION_YIELD:
 			/* Cannot yield from a nested call to unlang_interpret */
@@ -1091,36 +979,61 @@ CC_HINT(hot) rlm_rcode_t unlang_interpret(request_t *request, bool running)
 			intp->funcs.yield(request, intp->uctx);
 			return RLM_MODULE_NOT_SET;
 
-		case UNLANG_FRAME_ACTION_RETRY:	/* retry the current frame */
-			goto next;
+			/*
+			 *	We need to pop the current frame.  The final result is already set by
+			 *	calculate_result().
+			 */
+		case UNLANG_FRAME_ACTION_POP:
+			DUMP_STACK;
+
+			/*
+			 *	Transition back to the C stack
+			 *
+			 *	We still need to merge in the previous frame's result into the top frame.  But
+			 *	we don't care about the action, as we're returning from the top frame.  We do,
+			 *	however, return the rcode to the caller, if it was requested.
+			 */
+			if (is_top_frame(frame)) {
+				goto done;
+			}
+
+			/*
+			 *	Head on back up the stack
+			 */
+			frame_pop(request, stack);
+			RDEBUG4("** [%i] %s - frame popped", stack->depth + 1, __FUNCTION__);
+
+			/*
+			 *	Update the stack frame
+			 */
+			frame = &stack->frame[stack->depth];
+
+			just_calculate = !is_repeatable(frame);
+			repeatable_clear(frame);
+			continue;
 		}
-		break;
 	}
+
+done:
+	fr_assert(is_top_frame(frame));
 
 	fr_assert(stack->depth >= 0);
 
-	/*
-	 *	We're at the top frame, return the result from the
-	 *	stack, and get rid of the top frame.
-	 */
-	RDEBUG4("** [%i] %s - interpret exiting, returning (%s)", stack->depth, __FUNCTION__,
-		fr_table_str_by_value(mod_rcode_table, frame->section_result.rcode, "<invalid>"));
-
-	DUMP_STACK;
-
 	{
 		rlm_rcode_t		rcode;
+
 		/*
 		 *	Record this now as the done functions may free
 		 *	the request.
 		 *
-		 *	Note: We use p_result here, as that's where the
+		 *	Note: We use my_result here, as that's where the
 		 *	result of evaluating the frame was written.
-		 *	We don't use the section_result, as that may have
-		 * 	been left as its default value which may be 0
-		 *	(reject).
 		 */
-		rcode = frame->p_result->rcode;
+		rcode = frame->my_result.rcode;
+
+		if (frame->p_result) *frame->p_result = frame->my_result;
+
+		frame_pop(request, stack);
 
 		/*
 		 *	This usually means the request is complete in its
@@ -1234,9 +1147,8 @@ void *unlang_interpret_stack_alloc(TALLOC_CTX *ctx)
 	 *	like too low level to make into a tuneable.
 	 */
 	MEM(stack = talloc_zero_pooled_object(ctx, unlang_stack_t, UNLANG_STACK_MAX, 128));	/* 128 bytes per state */
-	stack->frame[0].p_result = &stack->frame[0].section_result;
-	stack->frame[0].scratch_result = UNLANG_RESULT_NOT_SET;
-	stack->frame[0].section_result = UNLANG_RESULT_NOT_SET;
+	stack->frame[0].my_result = UNLANG_RESULT_NOT_SET;
+	stack->frame[0].p_result = NULL;
 	stack->frame[0].instruction = &unlang_instruction;	/* The top frame has no instruction, so we use a dummy one */
 
 	return stack;
@@ -1257,15 +1169,15 @@ void unlang_interpret_request_done(request_t *request)
 	request->master_state = REQUEST_DONE;
 	switch (request->type) {
 	case REQUEST_TYPE_EXTERNAL:
-		intp->funcs.done_external(request, frame_current(request)->section_result.rcode, intp->uctx);
+		intp->funcs.done_external(request, frame_current(request)->my_result.rcode, intp->uctx);
 		break;
 
 	case REQUEST_TYPE_INTERNAL:
-		intp->funcs.done_internal(request, frame_current(request)->section_result.rcode, intp->uctx);
+		intp->funcs.done_internal(request, frame_current(request)->my_result.rcode, intp->uctx);
 		break;
 
 	case REQUEST_TYPE_DETACHED:
-		intp->funcs.done_detached(request, frame_current(request)->section_result.rcode, intp->uctx);	/* Callback will usually free the request */
+		intp->funcs.done_detached(request, frame_current(request)->my_result.rcode, intp->uctx);	/* Callback will usually free the request */
 		break;
 	}
 }

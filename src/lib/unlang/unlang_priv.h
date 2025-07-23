@@ -410,14 +410,7 @@ struct unlang_stack_frame_s {
 	 */
 	void			*state;
 
-	unlang_result_t		section_result;			//!< The aggregate result of executing all siblings
-								///< in this section.  This will be merged with the
-								///< higher stack frame's rcode when the frame is popped.
-								///< If the rcode is set to RLM_MODULE_NOT_SET when
-								///< the frame is popped, then the rcode of the frame
-								///< does not modify the rcode of the frame above it.
-
-	unlang_result_t		scratch_result;			//!< The result of executing the current instruction.
+	unlang_result_t		my_result;			//!< The result of executing the current instruction.
 								///< This will be set to RLM_MODULE_NOT_SET, and
 								///< MOD_ACTION_NOT_SET when a new instruction is set
 								///< for the frame.  If p_result does not point to this
@@ -425,12 +418,7 @@ struct unlang_stack_frame_s {
 								///< left as NOT_SET and will be ignored.
 								///< This values here will persist between yields.
 
-	unlang_result_t		*p_result;			//!< Where to write the result of executing the current
-								///< instruction.  Will either point to `scratch_result`,
-								///< OR if the parent does not want its rcode to be updated
-								///< by a child it pushed for evaluation, it will point to
-								///< memory in the parent's frame state, so that the parent
-								///< can manually process the rcode.
+	unlang_result_t		*p_result;			//!< Where the final output will be stored.  May be NULL.
 
 	unlang_retry_t		*retry;				//!< if the frame is being retried.
 
@@ -485,7 +473,6 @@ static inline bool is_repeatable(unlang_stack_frame_t const *frame)		{ return fr
 static inline bool is_top_frame(unlang_stack_frame_t const *frame)		{ return frame->flag & UNLANG_FRAME_FLAG_TOP_FRAME; }
 static inline bool is_yielded(unlang_stack_frame_t const *frame) 		{ return frame->flag & UNLANG_FRAME_FLAG_YIELDED; }
 static inline bool is_unwinding(unlang_stack_frame_t const *frame) 		{ return frame->flag & UNLANG_FRAME_FLAG_UNWIND; }
-static inline bool is_private_result(unlang_stack_frame_t const *frame)		{ return !(frame->p_result == &frame->section_result); }
 
 static inline bool _instruction_has_debug_braces(unlang_t const *instruction)	{ return unlang_ops[instruction->type].flag & UNLANG_OP_FLAG_DEBUG_BRACES; }
 static inline bool _frame_has_debug_braces(unlang_stack_frame_t const *frame)	{ return unlang_ops[frame->instruction->type].flag & UNLANG_OP_FLAG_DEBUG_BRACES; }
@@ -637,7 +624,7 @@ static inline void frame_state_init(unlang_stack_t *stack, unlang_stack_frame_t 
 	/*
 	 *	Reset for each instruction
 	 */
-	frame->scratch_result = UNLANG_RESULT_NOT_SET;
+	frame->my_result = UNLANG_RESULT_NOT_SET;
 
 	frame->process = op->interpret;
 	frame->signal = op->signal;

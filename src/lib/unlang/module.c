@@ -259,19 +259,18 @@ unlang_action_t unlang_module_yield_to_section(unlang_result_t *p_result,
 		 *	Pretend as if we called the section
 		 *	and used the default rcode value.
 		 */
-		frame->scratch_result = (unlang_result_t) {.rcode = default_rcode, .priority = MOD_ACTION_NOT_SET };
+		frame->my_result = UNLANG_RESULT_RCODE(default_rcode);
 
 		state = talloc_get_type_abort(frame->state, unlang_frame_state_module_t);
 
 		/*
-		 *	We must pass a pointer to the scratch
-		 *	rcode here, as we're pretending we're
-		 *	executing the resume function using the
-		 *	interpreter, which means it must modify
-		 *	the scratch result for the frame, and
-		 *	_NOT_ what was passed in for p_result.
+		 *	We must pass a pointer our instruction result
+		 *	here, as we're pretending we're executing the
+		 *	resume function using the interpreter, which
+		 *	means it must modify the 'result for the frame,
+		 *	and _NOT_ what was passed in for p_result.
 		 */
-		return resume(&frame->scratch_result,
+		return resume(&frame->my_result,
 			      MODULE_CTX(m->mmc.mi, module_thread(m->mmc.mi)->data,
 			      		 state->env_data, rctx),
 			      request);
