@@ -855,6 +855,9 @@ unlang_frame_action_t frame_eval(request_t *request, unlang_stack_frame_t *frame
 
 			switch (fa) {
 			case UNLANG_FRAME_ACTION_POP:
+				/*
+				 *	@todo - this is really "pop _parent_ frame".
+				 */
 				goto pop;
 
 			case UNLANG_FRAME_ACTION_RETRY:
@@ -914,14 +917,6 @@ CC_HINT(hot) rlm_rcode_t unlang_interpret(request_t *request, bool running)
 	unlang_interpret_t	*intp = stack->intp;
 	unlang_stack_frame_t	*frame = &stack->frame[stack->depth];
 
-	/*
-	 *	This is needed to ensure that if a frame is marked
-	 *	for unwinding whilst the request is yielded, we
-	 *	unwind the cancelled frame correctly, instead of
-	 *	continuing.
-	 */
-	unlang_frame_action_t	fa = is_unwinding(frame) ? UNLANG_FRAME_ACTION_POP : UNLANG_FRAME_ACTION_NEXT;
-
 	bool just_calculate = false;
 
 #ifndef NDEBUG
@@ -939,17 +934,26 @@ CC_HINT(hot) rlm_rcode_t unlang_interpret(request_t *request, bool running)
 	if (!running) intp->funcs.resume(request, intp->uctx);
 
 	for (;;) {
+		unlang_frame_action_t fa;
+
 		fr_assert(stack->depth > 0);
 		fr_assert(stack->depth < UNLANG_STACK_MAX);
 
-		RDEBUG4("** [%i] %s - frame action %s", stack->depth, __FUNCTION__,
-			fr_table_str_by_value(unlang_frame_action_table, fa, "<INVALID>"));
+		/*
+		 *	We're unwinding.
+		 */
+		if (is_unwinding(frame)) goto pop;
 
 		/*
 		 *	Run the frame.  This either has us continue with a sibling (execute next)
 		 */
 		frame = &stack->frame[stack->depth];
 		fa = frame_eval(request, frame, just_calculate);
+
+		RDEBUG4("** [%i] %s - frame action %s", stack->depth, __FUNCTION__,
+			fr_table_str_by_value(unlang_frame_action_table, fa, "<INVALID>"));
+
+
 		switch (fa) {
 			/*
 			 *	Retry the current frame.  Except this has already been done in frame_eval(),
@@ -984,6 +988,7 @@ CC_HINT(hot) rlm_rcode_t unlang_interpret(request_t *request, bool running)
 			 *	calculate_result().
 			 */
 		case UNLANG_FRAME_ACTION_POP:
+		pop:
 			DUMP_STACK;
 
 			/*
